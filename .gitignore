@@ -1,0 +1,18 @@
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.log
+
+# Never commit personal photos or exported slides
+carousel-slide-*.png
+/exports/
+/my-photos/
+
+# Node
+node_modules/
+
+# Local editor/tooling
+.claude/
+
+# Personal notes — kept off GitHub
+CASE-STUDY-panel-redesign.md
