@@ -88,6 +88,13 @@
       display:flex; align-items:center; justify-content:center;
     }
     #mtoolbar button.active{color:var(--accent);}
+    /* compact controls on mobile */
+    .panel .row{margin-bottom:6px;}
+    .panel .row .lab{width:74px; font-size:12px;}
+    .panel input[type=range]{height:22px;}
+    .panel .group{margin-bottom:10px;}
+    .panel .selbar{padding:8px 10px;}
+    #mtoolbar button{width:72px; font-size:11px;}
   }
   .group{margin-bottom:18px;}
   .group > label.title{
@@ -113,10 +120,10 @@
     flex:1; background:var(--panel2); border:1px solid var(--line); color:var(--txt);
     border-radius:9px; padding:9px 10px; font-size:14px; font-family:inherit;
   }
-  .layouts{display:grid; grid-template-columns:repeat(4,1fr); gap:8px;}
+  .layouts{display:grid; grid-template-columns:repeat(6,1fr); gap:6px;}
   .layouts .lay{
     aspect-ratio:4/5; background:var(--panel2); border:1px solid var(--line);
-    border-radius:8px; cursor:pointer; position:relative; overflow:hidden; padding:4px;
+    border-radius:6px; cursor:pointer; position:relative; overflow:hidden; padding:3px;
   }
   .layouts .lay.active{border-color:var(--accent); box-shadow:0 0 0 2px var(--accent) inset;}
   .layouts .lay i{position:absolute; background:#4b4b55; border-radius:2px; display:block;}
@@ -1397,7 +1404,7 @@ function fitCanvasToSheet(){
   if(panel.classList.contains('open')){
     const headerBottom=document.querySelector('header').getBoundingClientRect().bottom;
     const vh=window.innerHeight, toolbarH=60;
-    const sheetH=Math.round(vh*0.45);                          // FIXED sheet height → the photo never jumps between tools
+    const sheetH=Math.round(vh*0.40);                          // FIXED sheet height → the photo never jumps between tools
     panel.style.maxHeight='none'; panel.style.height=sheetH+'px';    // content scrolls inside the sheet
     stage.style.flex='0 0 auto';
     stage.style.height=Math.max(140, vh - toolbarH - headerBottom - sheetH - 6)+'px';
