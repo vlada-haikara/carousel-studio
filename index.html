@@ -1525,7 +1525,7 @@ document.querySelectorAll('#toolTabs button').forEach(b=> b.onclick=()=>showTab(
 // ---- Mobile editor: bottom tool bar + one slide-up sheet at a time ----
 const MQ=matchMedia('(max-width:860px)');
 function isMobile(){ return MQ.matches; }
-let sheetName=null, lastSelKey='';
+let sheetName=null, lastSelKey='', sheetExpanded=false;
 const TOOL_TITLES={slides:'Slides', layout:'Layout', photos:'Photos', text:'Text', stickers:'Stickers', bg:'Background', format:'Canvas format', selected:'Edit selected'};
 const TAB_TOOLS=['layout','photos','text','stickers','bg'];
 function sectionEl(name){
@@ -1545,8 +1545,8 @@ function fitCanvasToSheet(){
   if(!isMobile()){ stage.style.height=''; stage.style.flex=''; panel.style.maxHeight=''; return; }
   if(panel.classList.contains('open')){
     const headerBottom=document.querySelector('header').getBoundingClientRect().bottom;
-    const vh=window.innerHeight, toolbarH=60;
-    const sheetH=Math.round(vh*0.40);                          // FIXED sheet height → the photo never jumps between tools
+    const vh=window.innerHeight, toolbarH=76;
+    const sheetH=Math.round(vh*(sheetExpanded?0.60:0.40));     // default height, or taller when the grabber is pulled up
     panel.style.maxHeight='none'; panel.style.height=sheetH+'px';    // content scrolls inside the sheet
     stage.style.flex='0 0 auto';
     stage.style.height=Math.max(140, vh - toolbarH - headerBottom - sheetH - 6)+'px';
@@ -1563,7 +1563,7 @@ function openSheet(name){
   requestAnimationFrame(fitCanvasToSheet);
 }
 function closeSheet(){
-  sheetName=null;
+  sheetName=null; sheetExpanded=false;
   document.querySelector('.panel').classList.remove('open');
   document.querySelectorAll('#mtoolbar button').forEach(b=>b.classList.remove('active'));
   requestAnimationFrame(fitCanvasToSheet);
@@ -1583,11 +1583,18 @@ document.querySelectorAll('#mtoolbar button').forEach(b=>{
   b.onclick=()=>{ if(sheetName===b.dataset.tool) closeSheet(); else openSheet(b.dataset.tool); };
 });
 document.getElementById('sheetClose').onclick=closeSheet;
-// swipe the grab-handle down to dismiss
-(function(){ let sy=null; const h=document.getElementById('sheetHdr');
-  h.addEventListener('pointerdown',e=>{sy=e.clientY;});
-  h.addEventListener('pointermove',e=>{ if(sy!=null && e.clientY-sy>50){ closeSheet(); sy=null; } });
-  h.addEventListener('pointerup',()=>{sy=null;}); h.addEventListener('pointercancel',()=>{sy=null;});
+// Drag the grab-handle: pull UP to expand the sheet, pull DOWN to collapse it,
+// and pull down again from the default height to close it.
+(function(){ let sy=null, moved=false; const h=document.getElementById('sheetHdr');
+  h.addEventListener('pointerdown',e=>{ sy=e.clientY; moved=false; });
+  h.addEventListener('pointermove',e=>{ if(sy!=null && Math.abs(e.clientY-sy)>4) moved=true; });
+  h.addEventListener('pointerup',e=>{
+    if(sy==null) return; const dy=e.clientY-sy; sy=null;
+    if(!moved) return;                                       // a tap does nothing (use Done to close)
+    if(dy<=-35){ if(!sheetExpanded){ sheetExpanded=true; requestAnimationFrame(fitCanvasToSheet); } }
+    else if(dy>=35){ if(sheetExpanded){ sheetExpanded=false; requestAnimationFrame(fitCanvasToSheet); } else { closeSheet(); } }
+  });
+  h.addEventListener('pointercancel',()=>{sy=null;});
 })();
 MQ.addEventListener('change', applyMode);
 // when selection changes on mobile, auto-raise the Selected sheet
