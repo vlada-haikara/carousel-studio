@@ -836,7 +836,7 @@ function syncPanel(){
       document.getElementById('tTintRow').style.display = (bg!=='none')?'flex':'none';
     };
     syncBg();
-    document.getElementById('tTxt').oninput=e=>{t.text=e.target.value; render();};
+    document.getElementById('tTxt').oninput=e=>{t.text=e.target.value; t.placeholder=false; render();};
     document.getElementById('tSize').oninput=e=>{t.size=+e.target.value; render();};
     document.getElementById('tColor').oninput=e=>{t.color=e.target.value; render();};
     document.getElementById('tBrand').onclick=()=>{t.color=S().brand; document.getElementById('tColor').value=t.color; render();};
@@ -970,7 +970,9 @@ function positionEditor(t){
 function startEdit(i){
   editing=i; const t=S().texts[i];
   positionEditor(t);
-  editor.innerText=t.text; editor.style.display='block';
+  // A never-typed placeholder ("Your text", sticker defaults) starts empty so you can
+  // type straight away without deleting it first.
+  editor.innerText = t.placeholder ? '' : t.text; editor.style.display='block';
   render();
   editor.focus();
   const range=document.createRange(); range.selectNodeContents(editor); range.collapse(false);
@@ -978,12 +980,19 @@ function startEdit(i){
 }
 function commitEdit(){
   if(editing===null)return;
-  const t=S().texts[editing]; t.text=(editor.innerText||' ').replace(/\n$/,'');
+  const t=S().texts[editing];
+  const typed=(editor.innerText||'').replace(/\n$/,'');
+  if(typed==='' && t.placeholder){
+    // opened the placeholder but typed nothing — keep its default text as-is
+  }else{
+    t.text = typed || ' ';
+    t.placeholder = false;
+  }
   editing=null; editor.style.display='none';
   const tt=document.getElementById('tTxt'); if(tt) tt.value=t.text;   // keep field in sync WITHOUT rebuilding the panel (so a slider mid-drag survives)
   render();
 }
-editor.addEventListener('input',()=>{ if(editing!==null){ const t=S().texts[editing]; t.text=editor.innerText; render(); positionEditor(t); }});
+editor.addEventListener('input',()=>{ if(editing!==null){ const t=S().texts[editing]; t.text=editor.innerText; if(t.text!=='') t.placeholder=false; render(); positionEditor(t); }});
 editor.addEventListener('blur', commitEdit);
 editor.addEventListener('keydown', e=>{ if(e.key==='Escape'){ e.preventDefault(); commitEdit(); }});
 // touching anything outside the editor/canvas (e.g. a tab) commits the edit so text never gets stranded hidden
@@ -1176,7 +1185,7 @@ document.getElementById('bgImgClear').onclick=()=>{S().bgImg=null; render();};
 
 // ---- Add text ----
 function addTextObj(over){
-  const base={text:'Your text', x:.5, y:.5, size:72, color:'#ffffff', font:S().font, align:'center', bold:false, curve:0,
+  const base={text:'Your text', placeholder:true, x:.5, y:.5, size:72, color:'#ffffff', font:S().font, align:'center', bold:false, curve:0,
     bg:'none', bgColor:'#ffffff', bgOpacity:0.9, blur:5, bgPad:22, bgRadius:18};
   S().texts.push(Object.assign(base, over||{}));
   sel={type:'text', i:S().texts.length-1}; render(); syncPanel();
