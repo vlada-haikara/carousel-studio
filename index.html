@@ -120,12 +120,12 @@
     }
     #mtoolbar button svg{width:25px; height:25px; display:block;}
     #mtoolbar button.active{color:var(--accent); background:var(--accent-deep); box-shadow:var(--raised-sm); font-weight:800;}
-    /* compact controls on mobile */
-    .panel .row{margin-bottom:6px;}
-    .panel .row .lab{width:74px; font-size:12px;}
-    .panel input[type=range]{height:22px;}
-    .panel .group{margin-bottom:10px;}
-    .panel .selbar{padding:8px 10px;}
+    /* roomier spacing on mobile — neumorphic shadows need breathing space */
+    .panel .row{margin-bottom:14px; gap:12px;}
+    .panel .row .lab{width:74px; font-size:13px;}
+    .panel input[type=range]{height:24px;}
+    .panel .group{margin-bottom:16px;}
+    .panel .selbar{padding:20px 18px;}
     #mtoolbar button{width:72px; font-size:11px;}
     /* comfortable touch targets inside the Selected panel */
     #selPanel .btn.sm{min-height:44px;}
@@ -138,7 +138,7 @@
     display:block; font-size:11px; text-transform:uppercase; letter-spacing:.09em;
     color:var(--txt-faint); margin-bottom:8px; font-weight:800;
   }
-  .row{display:flex; align-items:center; gap:10px; margin-bottom:11px;}
+  .row{display:flex; align-items:center; gap:12px; margin-bottom:14px;}
   .row .lab{font-size:14px; font-weight:700; color:var(--muted); width:92px; flex:0 0 auto;}
   /* Neumorphic slider — inset groove, mint fill, raised mint knob */
   input[type=range]{
