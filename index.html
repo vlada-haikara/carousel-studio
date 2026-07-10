@@ -53,9 +53,40 @@
     width:340px; flex:0 0 340px; border-left:1px solid var(--line);
     background:var(--panel); overflow-y:auto; padding:14px 14px 60px;
   }
+  /* --- mobile chrome (hidden on desktop) --- */
+  #sheetHdr{display:none;}
+  #mtoolbar{display:none;}
+  .sheet-grab{width:36px; height:4px; border-radius:2px; background:var(--line); margin:0 auto 8px;}
+  #sheetHdr .sheet-row{display:flex; align-items:center; justify-content:space-between;}
+  #sheetTitle{font-size:13px; font-weight:600; color:var(--txt);}
+
   @media (max-width:860px){
-    .panel{width:100%; flex:1 1 auto; border-left:none; border-top:1px solid var(--line); max-height:46vh;}
-    .stage{flex:1 1 54%;}
+    main{padding-bottom:60px;}                      /* room for the tool bar */
+    .stage{flex:1 1 auto; padding:10px;}
+    /* panel becomes a slide-up sheet */
+    .panel{
+      position:fixed; left:0; right:0; bottom:60px; width:auto; max-height:62vh;
+      border-left:none; border-top:1px solid var(--line); border-radius:16px 16px 0 0;
+      padding:10px 14px calc(16px + env(safe-area-inset-bottom,0));
+      transform:translateY(115%); transition:transform .22s ease; z-index:50;
+      box-shadow:0 -8px 28px rgba(0,0,0,.45);
+    }
+    .panel.open{transform:translateY(0);}
+    #sheetHdr{display:block; position:sticky; top:0; background:var(--panel); padding-top:2px; margin-bottom:6px; z-index:1;}
+    #toolTabs{display:none;}                         /* replaced by the tool bar */
+    .panel > p.hint{display:none;}                   /* drop the long footer note on mobile */
+    /* bottom tool bar */
+    #mtoolbar{
+      display:flex; position:fixed; left:0; right:0; bottom:0; height:60px;
+      background:var(--panel); border-top:1px solid var(--line); z-index:60;
+      overflow-x:auto; gap:2px; padding:0 6px calc(env(safe-area-inset-bottom,0)); align-items:stretch;
+    }
+    #mtoolbar button{
+      flex:1 0 auto; min-width:64px; min-height:56px; background:none; border:none;
+      color:var(--muted); font-family:inherit; font-size:11.5px; font-weight:600; white-space:nowrap;
+      display:flex; align-items:center; justify-content:center;
+    }
+    #mtoolbar button.active{color:var(--accent);}
   }
   .group{margin-bottom:18px;}
   .group > label.title{
@@ -155,8 +186,12 @@
   </div>
 
   <aside class="panel">
+    <div id="sheetHdr">
+      <div class="sheet-grab"></div>
+      <div class="sheet-row"><span id="sheetTitle">Edit</span><button class="btn sm ghost" id="sheetClose">Done</button></div>
+    </div>
     <!-- ZONE A · app/canvas level -->
-    <div class="group">
+    <div class="group" id="grpFormat">
       <label class="title">Canvas format</label>
       <div class="fmts" id="fmts">
         <button class="btn sm" data-h="1350">Post 4:5</button>
@@ -166,13 +201,13 @@
     </div>
 
     <!-- ZONE B · contextual controls (change with what you select) -->
-    <div class="group">
+    <div class="group" id="grpSelected">
       <label class="title">Selected</label>
       <div id="selPanel"></div>
     </div>
 
     <!-- ZONE C · slides filmstrip -->
-    <div class="group">
+    <div class="group" id="grpSlides">
       <label class="title">Slides</label>
       <div class="slides" id="slidesBar"></div>
       <div class="twocol" style="margin-top:10px;">
@@ -243,6 +278,16 @@
     <p class="hint" style="margin-top:14px;">Everything runs on your device — nothing is uploaded. On iPad: open in Safari → Share → Add to Home Screen.</p>
   </aside>
 </main>
+
+<nav id="mtoolbar" aria-label="Tools">
+  <button data-tool="slides">Slides</button>
+  <button data-tool="layout">Layout</button>
+  <button data-tool="photos">Photos</button>
+  <button data-tool="text">Text</button>
+  <button data-tool="stickers">Stickers</button>
+  <button data-tool="bg">Background</button>
+  <button data-tool="format">Format</button>
+</nav>
 
 <input type="file" id="photoInput" accept="image/*,video/*" style="display:none">
 <input type="file" id="bgInput" accept="image/*" style="display:none">
@@ -572,9 +617,14 @@ function startVideoLoop(){
   const tick=()=>{ if(!slideHasVideo()){ videoLoop=null; return; } drawScene(ctx,true); drawThumb(cur); videoLoop=requestAnimationFrame(tick); };
   videoLoop=requestAnimationFrame(tick);
 }
+function updateExportButtons(){
+  const b=document.getElementById('exportVidBtn');
+  if(b) b.style.display = slideHasVideo() ? '' : 'none';   // only show "Export video" when the slide has a video
+}
 function render(){
   drawScene(ctx,true);
   drawThumb(cur);
+  updateExportButtons();
   if(slideHasVideo()) startVideoLoop();             // keep videos playing live in the preview
 }
 
@@ -612,6 +662,7 @@ function syncPanel(){
   bgColor.value=s.bg; brandColor.value=s.brand;
   gap.value=s.gap; radius.value=s.radius; pad.value=s.pad; frame.value=s.frame;
   requestAnimationFrame(refreshVals);
+  mobileSyncSelection();
 
   if(!sel){
     selPanel.innerHTML='<div class="inspector-empty">Nothing selected yet. Tap a photo, text, or sticker on the canvas to edit it here.</div>';
@@ -859,6 +910,7 @@ function updateSizeSlider(){
 }
 canvas.addEventListener('pointerdown',e=>{
   if(editing!==null) commitEdit();
+  if(isMobile() && sheetName && sheetName!=='selected') closeSheet();   // working on canvas dismisses a tool sheet
   const p=toCanvas(e);
   pointers.set(e.pointerId,{x:p.x,y:p.y});
   try{ canvas.setPointerCapture(e.pointerId); }catch(err){}
@@ -1136,8 +1188,10 @@ document.getElementById('exportVidBtn').onclick=()=>{
   startVideoLoop();
   const stream=canvas.captureStream(30);
   try{ const av=vids[0].captureStream ? vids[0].captureStream() : null; const at=av&&av.getAudioTracks()[0]; if(at) stream.addTrack(at); }catch(e){}
-  let rec; try{ rec=new MediaRecorder(stream, mime?{mimeType:mime, videoBitsPerSecond:10000000}:{videoBitsPerSecond:10000000}); }
-  catch(e){ alert('Could not start recording: '+e.message); vids.forEach(v=>v.muted=true); return; }
+  const opts={ videoBitsPerSecond:20000000, audioBitsPerSecond:192000 };   // ~20 Mbps → near-lossless at 1080p
+  if(mime) opts.mimeType=mime;
+  let rec; try{ rec=new MediaRecorder(stream, opts); }
+  catch(e){ try{ rec=new MediaRecorder(stream, mime?{mimeType:mime}:undefined); }catch(e2){ alert('Could not start recording: '+e2.message); vids.forEach(v=>v.muted=true); return; } }
   const chunks=[];
   rec.ondataavailable=e=>{ if(e.data && e.data.size) chunks.push(e.data); };
   rec.onstop=()=>{
@@ -1291,13 +1345,75 @@ function commitValEdit(el){
 panelEl.addEventListener('focusout', e=>{ if(e.target.classList && e.target.classList.contains('val') && e.target.isContentEditable) commitValEdit(e.target); });
 panelEl.addEventListener('keydown', e=>{ if(e.target.classList && e.target.classList.contains('val') && e.target.isContentEditable && e.key==='Enter'){ e.preventDefault(); e.target.blur(); } });
 
-// ---- Tabbed insert tools ----
+// ---- Tabbed insert tools (desktop) ----
+let currentTab='layout';
 function showTab(name){
+  currentTab=name;
   document.querySelectorAll('#toolTabs button').forEach(b=>b.classList.toggle('active', b.dataset.tab===name));
   document.querySelectorAll('.tabpane').forEach(p=>p.style.display = (p.dataset.pane===name?'block':'none'));
 }
 document.querySelectorAll('#toolTabs button').forEach(b=> b.onclick=()=>showTab(b.dataset.tab));
 
+// ---- Mobile editor: bottom tool bar + one slide-up sheet at a time ----
+const MQ=matchMedia('(max-width:860px)');
+function isMobile(){ return MQ.matches; }
+let sheetName=null, lastSelKey='';
+const TOOL_TITLES={slides:'Slides', layout:'Layout', photos:'Photos', text:'Text', stickers:'Stickers', bg:'Background', format:'Canvas format', selected:'Edit selected'};
+const TAB_TOOLS=['layout','photos','text','stickers','bg'];
+function sectionEl(name){
+  if(name==='format') return document.getElementById('grpFormat');
+  if(name==='selected') return document.getElementById('grpSelected');
+  if(name==='slides') return document.getElementById('grpSlides');
+  return document.querySelector('.panel .tabpane[data-pane="'+name+'"]');
+}
+function showOnlySection(name){
+  ['grpFormat','grpSelected','grpSlides'].forEach(id=>{ const e=document.getElementById(id); if(e) e.style.display='none'; });
+  document.querySelectorAll('.panel .tabpane').forEach(p=>p.style.display='none');
+  const el=sectionEl(name); if(el) el.style.display='';
+}
+function openSheet(name){
+  if(!isMobile()){ if(TAB_TOOLS.includes(name)) showTab(name); return; }
+  sheetName=name;
+  if(TAB_TOOLS.includes(name)) currentTab=name;
+  showOnlySection(name);
+  document.getElementById('sheetTitle').textContent=TOOL_TITLES[name]||'Edit';
+  const p=document.querySelector('.panel'); p.classList.add('open'); p.scrollTop=0;
+  document.querySelectorAll('#mtoolbar button').forEach(b=>b.classList.toggle('active', b.dataset.tool===name));
+}
+function closeSheet(){
+  sheetName=null;
+  document.querySelector('.panel').classList.remove('open');
+  document.querySelectorAll('#mtoolbar button').forEach(b=>b.classList.remove('active'));
+}
+function applyMode(){
+  if(isMobile()){ closeSheet(); }
+  else{
+    ['grpFormat','grpSelected','grpSlides'].forEach(id=>{ const e=document.getElementById(id); if(e) e.style.display=''; });
+    document.querySelector('.panel').classList.remove('open');
+    document.querySelectorAll('#mtoolbar button').forEach(b=>b.classList.remove('active'));
+    showTab(currentTab);
+  }
+}
+document.querySelectorAll('#mtoolbar button').forEach(b=>{
+  b.onclick=()=>{ if(sheetName===b.dataset.tool) closeSheet(); else openSheet(b.dataset.tool); };
+});
+document.getElementById('sheetClose').onclick=closeSheet;
+// swipe the grab-handle down to dismiss
+(function(){ let sy=null; const h=document.getElementById('sheetHdr');
+  h.addEventListener('pointerdown',e=>{sy=e.clientY;});
+  h.addEventListener('pointermove',e=>{ if(sy!=null && e.clientY-sy>50){ closeSheet(); sy=null; } });
+  h.addEventListener('pointerup',()=>{sy=null;}); h.addEventListener('pointercancel',()=>{sy=null;});
+})();
+MQ.addEventListener('change', applyMode);
+// when selection changes on mobile, auto-raise the Selected sheet
+function mobileSyncSelection(){
+  if(!isMobile()) return;
+  const key=sel?(sel.type+':'+sel.i):'';
+  if(key===lastSelKey) return;
+  lastSelKey=key;
+  if(sel) openSheet('selected'); else if(sheetName==='selected') closeSheet();
+}
+
 // ---- Init ----
-buildLayouts(); buildSlidesBar(); render(); syncPanel();
+buildLayouts(); buildSlidesBar(); render(); syncPanel(); applyMode();
 </script>
