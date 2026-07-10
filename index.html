@@ -1,6 +1,12 @@
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Carousel Studio</title>
+<!-- Home-screen web app (opens full-screen, self-updating) -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Carousel Studio">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0f0f10">
 <style>
   :root{
     --bg:#0f0f10; --panel:#18181b; --panel2:#202024; --line:#2c2c31;
@@ -1511,4 +1517,10 @@ function mobileSyncSelection(){
 
 // ---- Init ----
 buildLayouts(); buildSlidesBar(); render(); syncPanel(); applyMode();
+
+// Keep the home-screen app auto-updating online, and working offline.
+// (Skipped on file:// — service workers need http/https.)
+if('serviceWorker' in navigator && location.protocol.startsWith('http')){
+  window.addEventListener('load', ()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+}
 </script>
