@@ -561,7 +561,7 @@ function drawScene(cx, showSel){
     }
     cx.font=(t.bold?'700 ':'')+t.size+'px "'+t.font+'"';
     const lines=t.text.split('\n'); let wmax=0;
-    lines.forEach(ln=>{wmax=Math.max(wmax,cx.measureText(ln||' ').width);});
+    lines.forEach(ln=>{ const m=cx.measureText(ln||' '); const iw=(m.actualBoundingBoxLeft||0)+((m.actualBoundingBoxRight!=null)?m.actualBoundingBoxRight:m.width); wmax=Math.max(wmax, iw); });
     const lineH=t.size*1.15, topY=t.y*H, x=t.x*W;
 
     // Draw text ON the alphabetic baseline, and measure the backdrop from the SAME
@@ -571,7 +571,12 @@ function drawScene(cx, showSel){
     const aA =(m0.actualBoundingBoxAscent!=null)?m0.actualBoundingBoxAscent:t.size*0.75;
     const aD =(mL.actualBoundingBoxDescent!=null)?mL.actualBoundingBoxDescent:t.size*0.20;
     const base0=topY+asc, baseL=topY+asc+(lines.length-1)*lineH;
-    const inkTop=base0-aA, inkBot=baseL+aD, inkH=inkBot-inkTop;
+    // Clamp to the letters' real extent so an emoji (which reports an oversized box) doesn't
+    // inflate the pill — the emoji just sits inside the padding instead.
+    const refAsc=cx.measureText('Hbdfhkl').actualBoundingBoxAscent||t.size*0.72;
+    const refDesc=cx.measureText('gjpqy').actualBoundingBoxDescent||t.size*0.2;
+    const aAc=Math.min(aA, refAsc*1.03), aDc=Math.min(aD, refDesc*1.08);
+    const inkTop=base0-aAc, inkBot=baseL+aDc, inkH=inkBot-inkTop;
 
     // an optional icon sits left of the text; the pill wraps icon + text as one group
     const iconW = t.icon ? t.size*0.75 : 0;
@@ -593,12 +598,18 @@ function drawScene(cx, showSel){
 
     if(t.icon) drawIcon(cx, t.icon, gx, vC, t.size, t.color);
 
-    cx.fillStyle=t.color; cx.textBaseline='alphabetic';
+    cx.fillStyle=t.color; cx.textBaseline='alphabetic'; cx.textAlign='left';
     if(t.icon){
-      cx.textAlign='left'; cx.fillText(lines[0], gx+iconW, base0);
+      cx.fillText(lines[0], gx+iconW, base0);
     }else{
-      cx.textAlign=t.align;
-      lines.forEach((ln,k)=>cx.fillText(ln, x, base0 + k*lineH));
+      // Position each line by its VISIBLE ink (not the advance width), so trailing emoji
+      // — which carry extra empty advance — don't drift centered/right text off-axis.
+      lines.forEach((ln,k)=>{
+        const m=cx.measureText(ln||' ');
+        const aL=m.actualBoundingBoxLeft||0, aR=(m.actualBoundingBoxRight!=null)?m.actualBoundingBoxRight:m.width;
+        const px=(t.align==='center')? x-(aR-aL)/2 : (t.align==='right')? x-aR : x+aL;
+        cx.fillText(ln, px, base0 + k*lineH);
+      });
     }
     if(showSel && sel&&sel.type==='text'&&sel.i===i){
       cx.strokeStyle='#8b5cf6'; cx.lineWidth=3; cx.setLineDash([10,6]);
@@ -886,7 +897,9 @@ function positionEditor(t){
   const aD =(mL.actualBoundingBoxDescent!=null)?mL.actualBoundingBoxDescent:t.size*0.20;
   const lineH=t.size*1.15, topY=t.y*H, x=t.x*W;
   const base0=topY+asc, baseL=topY+asc+(lines.length-1)*lineH;
-  const inkCenter=((base0-aA)+(baseL+aD))/2;
+  const refA=ctx.measureText('Hbdfhkl').actualBoundingBoxAscent||t.size*0.72;
+  const refD=ctx.measureText('gjpqy').actualBoundingBoxDescent||t.size*0.2;
+  const inkCenter=((base0-Math.min(aA,refA*1.03))+(baseL+Math.min(aD,refD*1.08)))/2;
   const iconW=t.icon? t.size*0.75:0;
   let textCenter;                                        // horizontal centre of the glyphs only
   if(t.align==='center') textCenter=x + iconW/2;
@@ -1126,7 +1139,7 @@ document.getElementById('bgImgClear').onclick=()=>{S().bgImg=null; render();};
 
 // ---- Add text ----
 function addTextObj(over){
-  const base={text:'Your text', x:.5, y:.5, size:72, color:'#ffffff', font:S().font, align:'center', bold:true, curve:0,
+  const base={text:'Your text', x:.5, y:.5, size:72, color:'#ffffff', font:S().font, align:'center', bold:false, curve:0,
     bg:'none', bgColor:'#ffffff', bgOpacity:0.9, blur:5, bgPad:22, bgRadius:18};
   S().texts.push(Object.assign(base, over||{}));
   sel={type:'text', i:S().texts.length-1}; render(); syncPanel();
@@ -1135,10 +1148,10 @@ document.getElementById('addText').onclick=()=>{ addTextObj(); startEdit(S().tex
 
 // Instagram-style sticker presets (a pill = solid backdrop + rounded corners)
 const STICKERS={
-  location:{text:'Add place', icon:'pin', size:46, color:'#ffffff', bg:'solid', bgColor:'#000000', bgOpacity:1, bgPad:26, bgRadius:90, y:.9},
-  caption :{text:'Your caption', size:58, color:'#1a1a1a', bg:'solid', bgColor:'#ffffff', bgOpacity:1, bgPad:28, bgRadius:28, y:.5},
-  mention :{text:'@username',    size:46, color:'#ffffff', bg:'solid', bgColor:'#000000', bgOpacity:1, bgPad:24, bgRadius:90, y:.85},
-  hashtag :{text:'#hashtag',     size:46, color:'#ffffff', bg:'solid', bgColor:'#000000', bgOpacity:1, bgPad:24, bgRadius:90, y:.8}
+  location:{text:'Add place', icon:'pin', size:46, color:'#ffffff', bold:true, bg:'solid', bgColor:'#000000', bgOpacity:1, bgPad:26, bgRadius:90, y:.9},
+  caption :{text:'Your caption', size:58, color:'#1a1a1a', bold:true, bg:'solid', bgColor:'#ffffff', bgOpacity:1, bgPad:28, bgRadius:28, y:.5},
+  mention :{text:'@username',    size:46, color:'#ffffff', bold:true, bg:'solid', bgColor:'#000000', bgOpacity:1, bgPad:24, bgRadius:90, y:.85},
+  hashtag :{text:'#hashtag',     size:46, color:'#ffffff', bold:true, bg:'solid', bgColor:'#000000', bgOpacity:1, bgPad:24, bgRadius:90, y:.8}
 };
 document.getElementById('stLoc').onclick    =()=>addTextObj(STICKERS.location);
 document.getElementById('stCap').onclick    =()=>addTextObj(STICKERS.caption);
@@ -1297,7 +1310,9 @@ function addFontOption(name){
   if(!FONTS.includes(name) && !customFontNames.includes(name)) customFontNames.push(name);
 }
 function registerFont(name, dataURL, persist){
-  const ff=new FontFace(name, 'url('+dataURL+')');
+  // declare the face covers all weights so the browser uses the font's real glyphs
+  // instead of synthesising fake bold (which looked heavy on single-weight custom fonts)
+  const ff=new FontFace(name, 'url('+dataURL+')', {weight:'100 900'});
   ff.load().then(face=>{
     document.fonts.add(face); addFontOption(name);
     if(persist){
