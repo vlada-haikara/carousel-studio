@@ -10,7 +10,7 @@
 <style>
   :root{
     /* Green glassmorphism — frosted panels over a colourful emerald field */
-    --field-base:#030b07;
+    --field-base:#0a2016;
     --txt:#ffffff; --muted:rgba(255,255,255,.72); --txt-faint:rgba(255,255,255,.50);
     --accent:#059669; --accent-strong:#047857; --on-accent:#06251b;
     --accent-fill:rgba(8,120,78,.42); --accent-border:rgba(10,160,110,.50);
@@ -30,9 +30,9 @@
   body{
     color:var(--txt);
     background:
-      radial-gradient(58% 44% at 18% 12%, rgba(18,64,38,.42) 0%, transparent 60%),
-      radial-gradient(52% 40% at 86% 20%, rgba(9,36,24,.5) 0%, transparent 60%),
-      radial-gradient(72% 60% at 50% 110%, rgba(20,66,44,.38) 0%, transparent 55%),
+      radial-gradient(58% 44% at 18% 12%, rgba(23,88,54,.55) 0%, transparent 60%),
+      radial-gradient(52% 40% at 86% 20%, rgba(14,66,45,.5) 0%, transparent 60%),
+      radial-gradient(72% 60% at 50% 110%, rgba(28,100,66,.5) 0%, transparent 55%),
       var(--field-base);
     background-attachment:fixed;
     font-family:'Archivo', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
@@ -117,7 +117,8 @@
       box-shadow:var(--shadow-glass-lg), var(--glass-highlight);
     }
     .panel.open{transform:translateY(0);}
-    #sheetHdr{display:block; position:sticky; top:0; background:transparent; padding-top:2px; margin-bottom:6px; z-index:1;}
+    #sheetHdr{display:block; position:sticky; top:0; z-index:2;
+      background:rgba(8,22,15,.94); margin:0 -16px 6px; padding:4px 16px 8px;}
     #toolTabs{display:none;}                         /* replaced by the tool bar */
     .panel > p.hint{display:none;}                   /* drop the long footer note on mobile */
     /* bottom tool bar — a frosted glass dock */
@@ -139,14 +140,14 @@
     /* roomier spacing on mobile — glass panels need breathing room too */
     .panel .row{margin-bottom:14px; gap:12px;}
     .panel .row .lab{width:74px; font-size:13px;}
-    .panel input[type=range]{height:24px;}
+    .panel input[type=range]{height:16px;}
     .panel .group{margin-bottom:16px;}
     .panel .selbar{padding:20px 18px;}
     #mtoolbar button{width:72px; font-size:11px;}
     /* comfortable touch targets inside the Selected panel */
     #selPanel .btn.sm{min-height:44px;}
     #selPanel input[type=color]{width:44px; height:44px;}
-    #selPanel input[type=range]{height:34px;}
+    #selPanel input[type=range]{height:16px;}
     #selPanel .seg button{min-height:42px;}
   }
   .group{margin-bottom:18px;}
