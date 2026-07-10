@@ -744,14 +744,14 @@ function syncPanel(){
         <div class="row"><span class="lab">Backdrop</span>
           <select id="tBg"><option value="none">None</option><option value="blur">Blur (frosted)</option><option value="solid">Solid</option></select></div>
         <div class="row" id="tBlurRow"><span class="lab">Blur</span><input type="range" id="tBlur" min="2" max="40" value="${t.blur}"><span class="val"></span></div>
+        <div class="row" id="tTintRow"><span class="lab">Tint</span><input type="color" id="tBgColor" value="${t.bgColor}">
+          <input type="range" id="tBgOpacity" data-unit="%" min="0" max="1" step="0.01" value="${t.bgOpacity}" title="Tint strength"><span class="val"></span></div>
         <button class="btn sm ghost" id="tMoreBtn" style="width:100%; margin:4px 0 8px;">${textMoreOpen?'Less settings ▴':'More settings ▾'}</button>
         <div id="tMore" style="display:${textMoreOpen?'block':'none'}">
           <div class="row"><span class="lab">Size</span><input type="range" id="tSize" min="20" max="200" value="${t.size}"><span class="val"></span></div>
           <div class="row"><span class="lab">Align</span>
             <select id="tAlign"><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select></div>
           <div class="row"><span class="lab">Curve</span><input type="range" id="tCurve" min="-180" max="180" value="${t.curve||0}"><button class="btn sm ghost" id="tCurveReset" title="Straighten (set to 0)">Straighten</button><span class="val"></span></div>
-          <div class="row"><span class="lab">Tint</span><input type="color" id="tBgColor" value="${t.bgColor}">
-            <input type="range" id="tBgOpacity" data-unit="%" min="0" max="1" step="0.01" value="${t.bgOpacity}" title="Tint strength"><span class="val"></span></div>
           <div class="row"><span class="lab">Padding</span><input type="range" id="tBgPad" min="0" max="70" value="${t.bgPad}"><span class="val"></span></div>
           <div class="row"><span class="lab">Bg corners</span><input type="range" id="tBgRadius" min="0" max="90" value="${t.bgRadius}"><span class="val"></span></div>
           ${t.bg!=='none'?'<button class="btn sm" id="tSwap" style="width:100%; margin-bottom:8px;">Swap text ⇄ backdrop colours</button>':''}
@@ -769,8 +769,11 @@ function syncPanel(){
       document.getElementById('tMore').style.display=textMoreOpen?'block':'none';
       document.getElementById('tMoreBtn').textContent=textMoreOpen?'Less settings ▴':'More settings ▾';
     };
-    const syncBlurRow=()=>{ document.getElementById('tBlurRow').style.display = (document.getElementById('tBg').value==='blur')?'flex':'none'; };
-    syncBlurRow();
+    const syncBg=()=>{ const bg=document.getElementById('tBg').value;
+      document.getElementById('tBlurRow').style.display = (bg==='blur')?'flex':'none';
+      document.getElementById('tTintRow').style.display = (bg!=='none')?'flex':'none';
+    };
+    syncBg();
     document.getElementById('tTxt').oninput=e=>{t.text=e.target.value; render();};
     document.getElementById('tSize').oninput=e=>{t.size=+e.target.value; render();};
     document.getElementById('tColor').oninput=e=>{t.color=e.target.value; render();};
@@ -790,7 +793,7 @@ function syncPanel(){
       t.bg=e.target.value;
       if(t.bg==='solid') t.bgOpacity=1;                          // solid → full tint
       else if(t.bg==='blur'){ t.bgColor='#ffffff'; t.blur=5; t.bgOpacity=0.18; }  // blur → subtle white frost
-      syncBlurRow(); render(); syncPanel();
+      syncBg(); render(); syncPanel();
     };
     document.getElementById('tBlur').oninput=e=>{t.blur=+e.target.value; render();};
     document.getElementById('tBgColor').oninput=e=>{t.bgColor=e.target.value; render();};
@@ -911,7 +914,9 @@ function startEdit(i){
 function commitEdit(){
   if(editing===null)return;
   const t=S().texts[editing]; t.text=(editor.innerText||' ').replace(/\n$/,'');
-  editing=null; editor.style.display='none'; render(); syncPanel();
+  editing=null; editor.style.display='none';
+  const tt=document.getElementById('tTxt'); if(tt) tt.value=t.text;   // keep field in sync WITHOUT rebuilding the panel (so a slider mid-drag survives)
+  render();
 }
 editor.addEventListener('input',()=>{ if(editing!==null){ const t=S().texts[editing]; t.text=editor.innerText; render(); positionEditor(t); }});
 editor.addEventListener('blur', commitEdit);
