@@ -748,7 +748,7 @@ function syncPanel(){
     }
     selPanel.innerHTML=`
       <div class="selbar">
-        <div class="selhd">Photo ${sel.i+1}</div>
+        <div class="selhd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2.5"/><circle cx="8.5" cy="8.5" r="1.6"/><path d="M21 15.5l-4.5-4.5L5 22"/></svg>Photo ${sel.i+1}</div>
         <div class="row"><span class="lab">Zoom</span><input type="range" id="cellZoom" data-unit="x" min="1" max="8" step="0.1" value="${cell.scale}"><span class="val"></span></div>
         <div class="twocol">
           <button class="btn sm" id="cellPhoto">Change photo</button>
@@ -767,11 +767,11 @@ function syncPanel(){
     const sizePct=Math.round(ov.img? (ov.img.width*ov.scale/W*100) : 50);
     selPanel.innerHTML=`
       <div class="selbar">
-        <div class="selhd">Image</div>
+        <div class="selhd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="13" height="13" rx="2"/><path d="M10 10h11v11H10z"/></svg>Image</div>
         <div class="row"><span class="lab">Size</span><input type="range" id="ovSize" min="5" max="150" value="${sizePct}"><span class="val"></span></div>
         <div class="row"><span class="lab">Rotate</span><input type="range" id="ovRot" min="-180" max="180" value="${Math.round(ov.rot||0)}"><span class="val"></span></div>
         <div class="twocol">
-          <button class="btn sm ghost" id="ovFlip">Flip</button>
+          <button class="btn sm ghost${ov.flip?' on':''}" id="ovFlip" aria-pressed="${!!ov.flip}">Flip</button>
           <button class="btn sm ghost" id="ovStraight">Straighten</button>
         </div>
         <button class="btn sm ghost danger" id="ovDel" style="width:100%; margin-top:8px;">Delete image</button>
@@ -779,7 +779,8 @@ function syncPanel(){
       <p class="hint">Drag to move · pinch to resize and rotate.</p>`;
     document.getElementById('ovSize').oninput=e=>{ if(ov.img){ ov.scale=(+e.target.value/100)*W/ov.img.width; render(); } };
     document.getElementById('ovRot').oninput=e=>{ ov.rot=+e.target.value; render(); };
-    document.getElementById('ovFlip').onclick=()=>{ ov.flip=!ov.flip; render(); };
+    const ovFlip=document.getElementById('ovFlip');
+    ovFlip.onclick=()=>{ ov.flip=!ov.flip; ovFlip.classList.toggle('on', ov.flip); ovFlip.setAttribute('aria-pressed', !!ov.flip); render(); };
     document.getElementById('ovStraight').onclick=()=>{ ov.rot=0; document.getElementById('ovRot').value=0; render(); updateOverlaySliders(); };
     document.getElementById('ovDel').onclick=()=>{ S().overlays.splice(sel.i,1); sel=null; render(); syncPanel(); buildSlidesBar(); };
   }else{
@@ -1184,10 +1185,10 @@ document.getElementById('addText').onclick=()=>{ addTextObj(); startEdit(S().tex
 
 // Instagram-style sticker presets (a pill = solid backdrop + rounded corners)
 const STICKERS={
-  location:{text:'Add place', icon:'pin', size:46, color:'#ffffff', bold:true, bg:'solid', bgColor:'#000000', bgOpacity:1, bgPad:26, bgRadius:90, y:.9},
-  caption :{text:'Your caption', size:58, color:'#1a1a1a', bold:true, bg:'solid', bgColor:'#ffffff', bgOpacity:1, bgPad:28, bgRadius:28, y:.5},
-  mention :{text:'@username',    size:46, color:'#ffffff', bold:true, bg:'solid', bgColor:'#000000', bgOpacity:1, bgPad:24, bgRadius:90, y:.85},
-  hashtag :{text:'#hashtag',     size:46, color:'#ffffff', bold:true, bg:'solid', bgColor:'#000000', bgOpacity:1, bgPad:24, bgRadius:90, y:.8}
+  location:{text:'Add place', icon:'pin', size:46, color:'#ffffff', bold:false, bg:'solid', bgColor:'#000000', bgOpacity:1, bgPad:26, bgRadius:90, y:.9},
+  caption :{text:'Your caption', size:58, color:'#1a1a1a', bold:false, bg:'solid', bgColor:'#ffffff', bgOpacity:1, bgPad:28, bgRadius:28, y:.5},
+  mention :{text:'@username',    size:46, color:'#ffffff', bold:false, bg:'solid', bgColor:'#000000', bgOpacity:1, bgPad:24, bgRadius:90, y:.85},
+  hashtag :{text:'#hashtag',     size:46, color:'#ffffff', bold:false, bg:'solid', bgColor:'#000000', bgOpacity:1, bgPad:24, bgRadius:90, y:.8}
 };
 document.getElementById('stLoc').onclick    =()=>addTextObj(STICKERS.location);
 document.getElementById('stCap').onclick    =()=>addTextObj(STICKERS.caption);
