@@ -65,7 +65,7 @@
     .stage{flex:1 1 auto; padding:10px;}
     /* panel becomes a slide-up sheet */
     .panel{
-      position:fixed; left:0; right:0; bottom:60px; width:auto; max-height:62vh;
+      position:fixed; left:0; right:0; bottom:60px; width:auto; max-height:52vh;
       border-left:none; border-top:1px solid var(--line); border-radius:16px 16px 0 0;
       padding:10px 14px calc(16px + env(safe-area-inset-bottom,0));
       transform:translateY(115%); transition:transform .22s ease; z-index:50;
@@ -79,10 +79,11 @@
     #mtoolbar{
       display:flex; position:fixed; left:0; right:0; bottom:0; height:60px;
       background:var(--panel); border-top:1px solid var(--line); z-index:60;
-      overflow-x:auto; gap:2px; padding:0 6px calc(env(safe-area-inset-bottom,0)); align-items:stretch;
+      overflow-x:auto; gap:2px; padding:0 6px calc(env(safe-area-inset-bottom,0));
+      align-items:stretch; justify-content:center;                 /* keep the buttons grouped, not stretched apart */
     }
     #mtoolbar button{
-      flex:1 0 auto; min-width:64px; min-height:56px; background:none; border:none;
+      flex:0 0 auto; width:84px; min-height:56px; background:none; border:none;
       color:var(--muted); font-family:inherit; font-size:11.5px; font-weight:600; white-space:nowrap;
       display:flex; align-items:center; justify-content:center;
     }
@@ -614,7 +615,12 @@ let videoLoop=null;
 function slideHasVideo(){ return (S().cells||[]).some(c=>c.isVideo && c.img); }
 function startVideoLoop(){
   if(videoLoop!=null) return;
-  const tick=()=>{ if(!slideHasVideo()){ videoLoop=null; return; } drawScene(ctx,true); drawThumb(cur); videoLoop=requestAnimationFrame(tick); };
+  let last=0;
+  const tick=(t)=>{
+    if(!slideHasVideo()){ videoLoop=null; return; }
+    if(t-last>=32){ drawScene(ctx, !recording); last=t; }   // ~30fps; skip thumbnail; no selection frame while recording
+    videoLoop=requestAnimationFrame(tick);
+  };
   videoLoop=requestAnimationFrame(tick);
 }
 function updateExportButtons(){
@@ -663,6 +669,7 @@ function syncPanel(){
   gap.value=s.gap; radius.value=s.radius; pad.value=s.pad; frame.value=s.frame;
   requestAnimationFrame(refreshVals);
   mobileSyncSelection();
+  if(isMobile() && sheetName) requestAnimationFrame(fitCanvasToSheet);
 
   if(!sel){
     selPanel.innerHTML='<div class="inspector-empty">Nothing selected yet. Tap a photo, text, or sticker on the canvas to edit it here.</div>';
@@ -909,6 +916,7 @@ function updateSizeSlider(){
   if(z && sel && sel.type==='text'){ z.value=S().texts[sel.i].size; const o=z.parentElement.querySelector('.val'); if(o) o.textContent=formatVal(z); }
 }
 canvas.addEventListener('pointerdown',e=>{
+  if(recording) return;                                                 // ignore taps while exporting a video
   if(editing!==null) commitEdit();
   if(isMobile() && sheetName && sheetName!=='selected') closeSheet();   // working on canvas dismisses a tool sheet
   const p=toCanvas(e);
@@ -1184,6 +1192,7 @@ document.getElementById('exportVidBtn').onclick=()=>{
   const ext = (mime||'').indexOf('mp4')>=0 ? 'mp4' : 'webm';
   let dur=0; vids.forEach(v=>{ if(isFinite(v.duration)) dur=Math.max(dur, v.duration); });
   dur=Math.min(dur||4, 60);                                  // cap at 60s
+  sel=null; recording=true;                                  // clear selection + block edits so no dashed frame is captured
   vids.forEach(v=>{ try{ v.currentTime=0; v.muted=false; v.play().catch(()=>{}); }catch(e){} });
   startVideoLoop();
   const stream=canvas.captureStream(30);
@@ -1191,19 +1200,20 @@ document.getElementById('exportVidBtn').onclick=()=>{
   const opts={ videoBitsPerSecond:20000000, audioBitsPerSecond:192000 };   // ~20 Mbps → near-lossless at 1080p
   if(mime) opts.mimeType=mime;
   let rec; try{ rec=new MediaRecorder(stream, opts); }
-  catch(e){ try{ rec=new MediaRecorder(stream, mime?{mimeType:mime}:undefined); }catch(e2){ alert('Could not start recording: '+e2.message); vids.forEach(v=>v.muted=true); return; } }
+  catch(e){ try{ rec=new MediaRecorder(stream, mime?{mimeType:mime}:undefined); }catch(e2){ alert('Could not start recording: '+e2.message); recording=false; vids.forEach(v=>v.muted=true); render(); return; } }
   const chunks=[];
   rec.ondataavailable=e=>{ if(e.data && e.data.size) chunks.push(e.data); };
   rec.onstop=()=>{
     vids.forEach(v=>{ try{ v.muted=true; v.currentTime=0; v.play().catch(()=>{}); }catch(e){} });
-    recording=false; setRecUI(false);
+    recording=false; setRecUI(false); render();
     const blob=new Blob(chunks, {type: mime||'video/webm'});
     const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
     a.download='carousel-slide-'+(cur+1)+'.'+ext;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(()=>URL.revokeObjectURL(a.href), 800);
   };
-  recording=true; setRecUI(true, dur);
+  setRecUI(true, dur);
+  syncPanel();                                               // reflect the cleared selection in the panel
   rec.start();
   setTimeout(()=>{ try{ rec.stop(); }catch(e){} }, dur*1000+250);
 };
@@ -1371,6 +1381,19 @@ function showOnlySection(name){
   document.querySelectorAll('.panel .tabpane').forEach(p=>p.style.display='none');
   const el=sectionEl(name); if(el) el.style.display='';
 }
+function fitCanvasToSheet(){
+  const stage=document.querySelector('.stage');
+  const panel=document.querySelector('.panel');
+  if(!isMobile()){ stage.style.height=''; stage.style.flex=''; panel.style.maxHeight=''; return; }
+  if(panel.classList.contains('open')){
+    const headerBottom=document.querySelector('header').getBoundingClientRect().bottom;
+    const vh=window.innerHeight, toolbarH=60;
+    const minCanvas=Math.min(vh*0.42, 380);                                  // photo never shrinks below this
+    panel.style.maxHeight=Math.max(180, vh - toolbarH - headerBottom - minCanvas)+'px';  // cap sheet → it scrolls instead of eating the photo
+    const sheetTop=panel.getBoundingClientRect().top;
+    stage.style.flex='0 0 auto'; stage.style.height=Math.max(minCanvas, sheetTop - headerBottom - 6)+'px';
+  }else{ stage.style.height=''; stage.style.flex=''; panel.style.maxHeight=''; }
+}
 function openSheet(name){
   if(!isMobile()){ if(TAB_TOOLS.includes(name)) showTab(name); return; }
   sheetName=name;
@@ -1379,12 +1402,15 @@ function openSheet(name){
   document.getElementById('sheetTitle').textContent=TOOL_TITLES[name]||'Edit';
   const p=document.querySelector('.panel'); p.classList.add('open'); p.scrollTop=0;
   document.querySelectorAll('#mtoolbar button').forEach(b=>b.classList.toggle('active', b.dataset.tool===name));
+  requestAnimationFrame(fitCanvasToSheet);
 }
 function closeSheet(){
   sheetName=null;
   document.querySelector('.panel').classList.remove('open');
   document.querySelectorAll('#mtoolbar button').forEach(b=>b.classList.remove('active'));
+  requestAnimationFrame(fitCanvasToSheet);
 }
+window.addEventListener('resize', ()=>requestAnimationFrame(fitCanvasToSheet));
 function applyMode(){
   if(isMobile()){ closeSheet(); }
   else{
@@ -1393,6 +1419,7 @@ function applyMode(){
     document.querySelectorAll('#mtoolbar button').forEach(b=>b.classList.remove('active'));
     showTab(currentTab);
   }
+  requestAnimationFrame(fitCanvasToSheet);
 }
 document.querySelectorAll('#mtoolbar button').forEach(b=>{
   b.onclick=()=>{ if(sheetName===b.dataset.tool) closeSheet(); else openSheet(b.dataset.tool); };
