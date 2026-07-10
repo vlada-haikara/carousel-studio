@@ -61,11 +61,11 @@
   #sheetTitle{font-size:13px; font-weight:600; color:var(--txt);}
 
   @media (max-width:860px){
-    main{padding-bottom:60px;}                      /* room for the tool bar */
+    main{padding-bottom:76px;}                      /* room for the tool bar */
     .stage{flex:1 1 auto; padding:10px;}
     /* panel becomes a slide-up sheet */
     .panel{
-      position:fixed; left:0; right:0; bottom:60px; width:auto; max-height:52vh;
+      position:fixed; left:0; right:0; bottom:76px; width:auto; max-height:52vh;
       border-left:none; border-top:1px solid var(--line); border-radius:16px 16px 0 0;
       padding:10px 14px calc(16px + env(safe-area-inset-bottom,0));
       transform:translateY(115%); transition:transform .22s ease; z-index:50;
@@ -77,16 +77,17 @@
     .panel > p.hint{display:none;}                   /* drop the long footer note on mobile */
     /* bottom tool bar */
     #mtoolbar{
-      display:flex; position:fixed; left:0; right:0; bottom:0; height:60px;
+      display:flex; position:fixed; left:0; right:0; bottom:0; height:76px;
       background:var(--panel); border-top:1px solid var(--line); z-index:60;
       overflow-x:auto; gap:2px; padding:0 6px calc(env(safe-area-inset-bottom,0));
       align-items:stretch; justify-content:center;                 /* keep the buttons grouped, not stretched apart */
     }
     #mtoolbar button{
-      flex:0 0 auto; width:84px; min-height:56px; background:none; border:none;
+      flex:0 0 auto; width:78px; min-height:72px; background:none; border:none;
       color:var(--muted); font-family:inherit; font-size:11.5px; font-weight:600; white-space:nowrap;
-      display:flex; align-items:center; justify-content:center;
+      display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px;
     }
+    #mtoolbar button svg{width:25px; height:25px; display:block;}
     #mtoolbar button.active{color:var(--accent);}
     /* compact controls on mobile */
     .panel .row{margin-bottom:6px;}
@@ -288,13 +289,13 @@
 </main>
 
 <nav id="mtoolbar" aria-label="Tools">
-  <button data-tool="slides">Slides</button>
-  <button data-tool="layout">Layout</button>
-  <button data-tool="photos">Photos</button>
-  <button data-tool="text">Text</button>
-  <button data-tool="stickers">Stickers</button>
-  <button data-tool="bg">Background</button>
-  <button data-tool="format">Format</button>
+  <button data-tool="slides"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="13" height="14" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/></svg><span>Slides</span></button>
+  <button data-tool="layout"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5"/></svg><span>Layout</span></button>
+  <button data-tool="photos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2.5"/><circle cx="8.5" cy="8.5" r="1.6"/><path d="M21 15.5l-4.5-4.5L5 22"/></svg><span>Photos</span></button>
+  <button data-tool="text"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7V5h14v2"/><path d="M12 5v14"/><path d="M9 19h6"/></svg><span>Text</span></button>
+  <button data-tool="stickers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5a4.5 4.5 0 0 0 7 0"/><circle cx="9" cy="10" r=".8" fill="currentColor" stroke="none"/><circle cx="15" cy="10" r=".8" fill="currentColor" stroke="none"/></svg><span>Stickers</span></button>
+  <button data-tool="bg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c0 0 6 6.4 6 10.5a6 6 0 0 1-12 0C6 9.4 12 3 12 3z"/></svg><span>Background</span></button>
+  <button data-tool="format"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h9"/><path d="M17 7h3"/><circle cx="15" cy="7" r="2"/><path d="M4 17h3"/><path d="M11 17h9"/><circle cx="9" cy="17" r="2"/></svg><span>Format</span></button>
 </nav>
 
 <input type="file" id="photoInput" accept="image/*,video/*" style="display:none">

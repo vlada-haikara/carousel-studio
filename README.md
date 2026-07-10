@@ -3,12 +3,14 @@
 A local, offline tool for making Instagram carousels and photo collages — built to run entirely on an iPad (or any device) in the browser. No accounts, no uploads, no internet required. Your photos never leave your device.
 
 ## Features
-- **Collage layouts** — 8 arrangements for 1–4 photos
+- **Collage layouts** — 18 arrangements, from a single photo up to a 9-photo grid
 - **Reposition & zoom** each photo inside its frame (drag + zoom slider)
 - **Brand controls** — background color/image, brand accent color, font
 - **Fine details** — gap, corner rounding, outer margin, photo frames
-- **Text** — captions with size, color, bold, and alignment; drag to place
-- **Carousel slides** — build many slides, export each as a 1080×1350 PNG
+- **Text** — captions with your own fonts, size, color, alignment, curve, and a backdrop (solid / blur / tint); tap on the canvas to type
+- **Stickers** — Instagram-style location, caption, mention, and hashtag pills with editable colors
+- **Video** — add a video to a slide and export that slide as a video
+- **Carousel slides** — build many slides, export each as a crisp 2× PNG
 
 ## Run it locally
 It's a single file. Two ways:
