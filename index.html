@@ -361,6 +361,7 @@ let slides=[newSlide()];
 let cur=0;                       // current slide index
 let sel=null;                    // {type:'cell'|'text', i}
 let editing=null;                // index of text being edited inline
+let textMoreOpen=false;          // remember if the text "More settings" section is expanded
 
 function S(){return slides[cur];}
 
@@ -730,21 +731,24 @@ function syncPanel(){
         <div class="selhd">Text</div>
         <div class="row"><input type="text" id="tTxt" value="${t.text.replace(/"/g,'&quot;')}" placeholder="Type text…"></div>
         <div class="row"><span class="lab">Font</span><select id="tFont"></select></div>
-        <div class="row"><span class="lab">Size</span><input type="range" id="tSize" min="20" max="200" value="${t.size}"><span class="val"></span></div>
         <div class="row"><span class="lab">Color</span><input type="color" id="tColor" value="${t.color}">
           <button class="btn sm ghost" id="tBrand">Brand</button>
           <button class="btn sm ghost" id="tBold">Bold</button></div>
-        <div class="row"><span class="lab">Align</span>
-          <select id="tAlign"><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select></div>
-        <div class="row"><span class="lab">Curve</span><input type="range" id="tCurve" min="-180" max="180" value="${t.curve||0}"><button class="btn sm ghost" id="tCurveReset" title="Straighten (set to 0)">Straighten</button><span class="val"></span></div>
         <div class="row"><span class="lab">Backdrop</span>
           <select id="tBg"><option value="none">None</option><option value="blur">Blur (frosted)</option><option value="solid">Solid</option></select></div>
         <div class="row" id="tBlurRow"><span class="lab">Blur</span><input type="range" id="tBlur" min="2" max="40" value="${t.blur}"><span class="val"></span></div>
-        <div class="row"><span class="lab">Tint</span><input type="color" id="tBgColor" value="${t.bgColor}">
-          <input type="range" id="tBgOpacity" data-unit="%" min="0" max="1" step="0.01" value="${t.bgOpacity}" title="Tint strength"><span class="val"></span></div>
-        <div class="row"><span class="lab">Padding</span><input type="range" id="tBgPad" min="0" max="70" value="${t.bgPad}"><span class="val"></span></div>
-        <div class="row"><span class="lab">Bg corners</span><input type="range" id="tBgRadius" min="0" max="90" value="${t.bgRadius}"><span class="val"></span></div>
-        ${t.bg!=='none'?'<button class="btn sm" id="tSwap" style="width:100%; margin-bottom:8px;">Swap text ⇄ backdrop colours</button>':''}
+        <button class="btn sm ghost" id="tMoreBtn" style="width:100%; margin:4px 0 8px;">${textMoreOpen?'Less settings ▴':'More settings ▾'}</button>
+        <div id="tMore" style="display:${textMoreOpen?'block':'none'}">
+          <div class="row"><span class="lab">Size</span><input type="range" id="tSize" min="20" max="200" value="${t.size}"><span class="val"></span></div>
+          <div class="row"><span class="lab">Align</span>
+            <select id="tAlign"><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select></div>
+          <div class="row"><span class="lab">Curve</span><input type="range" id="tCurve" min="-180" max="180" value="${t.curve||0}"><button class="btn sm ghost" id="tCurveReset" title="Straighten (set to 0)">Straighten</button><span class="val"></span></div>
+          <div class="row"><span class="lab">Tint</span><input type="color" id="tBgColor" value="${t.bgColor}">
+            <input type="range" id="tBgOpacity" data-unit="%" min="0" max="1" step="0.01" value="${t.bgOpacity}" title="Tint strength"><span class="val"></span></div>
+          <div class="row"><span class="lab">Padding</span><input type="range" id="tBgPad" min="0" max="70" value="${t.bgPad}"><span class="val"></span></div>
+          <div class="row"><span class="lab">Bg corners</span><input type="range" id="tBgRadius" min="0" max="90" value="${t.bgRadius}"><span class="val"></span></div>
+          ${t.bg!=='none'?'<button class="btn sm" id="tSwap" style="width:100%; margin-bottom:8px;">Swap text ⇄ backdrop colours</button>':''}
+        </div>
         <button class="btn sm ghost danger" id="tDel" style="width:100%">Delete text</button>
       </div>`;
     const tf=document.getElementById('tFont');
@@ -753,6 +757,11 @@ function syncPanel(){
     tf.onchange=e=>{ t.font=e.target.value; S().font=e.target.value; render(); };
     document.getElementById('tAlign').value=t.align;
     document.getElementById('tBg').value=t.bg;
+    document.getElementById('tMoreBtn').onclick=()=>{
+      textMoreOpen=!textMoreOpen;
+      document.getElementById('tMore').style.display=textMoreOpen?'block':'none';
+      document.getElementById('tMoreBtn').textContent=textMoreOpen?'Less settings ▴':'More settings ▾';
+    };
     const syncBlurRow=()=>{ document.getElementById('tBlurRow').style.display = (document.getElementById('tBg').value==='blur')?'flex':'none'; };
     syncBlurRow();
     document.getElementById('tTxt').oninput=e=>{t.text=e.target.value; render();};
@@ -1388,11 +1397,11 @@ function fitCanvasToSheet(){
   if(panel.classList.contains('open')){
     const headerBottom=document.querySelector('header').getBoundingClientRect().bottom;
     const vh=window.innerHeight, toolbarH=60;
-    const minCanvas=Math.min(vh*0.42, 380);                                  // photo never shrinks below this
-    panel.style.maxHeight=Math.max(180, vh - toolbarH - headerBottom - minCanvas)+'px';  // cap sheet → it scrolls instead of eating the photo
-    const sheetTop=panel.getBoundingClientRect().top;
-    stage.style.flex='0 0 auto'; stage.style.height=Math.max(minCanvas, sheetTop - headerBottom - 6)+'px';
-  }else{ stage.style.height=''; stage.style.flex=''; panel.style.maxHeight=''; }
+    const sheetH=Math.round(vh*0.45);                          // FIXED sheet height → the photo never jumps between tools
+    panel.style.maxHeight='none'; panel.style.height=sheetH+'px';    // content scrolls inside the sheet
+    stage.style.flex='0 0 auto';
+    stage.style.height=Math.max(140, vh - toolbarH - headerBottom - sheetH - 6)+'px';
+  }else{ stage.style.height=''; stage.style.flex=''; panel.style.height=''; panel.style.maxHeight=''; }
 }
 function openSheet(name){
   if(!isMobile()){ if(TAB_TOOLS.includes(name)) showTab(name); return; }
