@@ -9,60 +9,84 @@
 <meta name="theme-color" content="#0f0f10">
 <style>
   :root{
-    --bg:#0f0f10; --panel:#18181b; --panel2:#202024; --line:#2c2c31;
-    --txt:#f4f4f5; --muted:#a1a1aa; --accent:#8b5cf6; --accent2:#c4b5fd;
+    /* Neumorphic "Carved Studio" — one dark clay surface, depth from paired shadows */
+    --bg:#262a31; --bg-hi:#3b434f; --bg-lo:#13161a;
+    --panel:#262a31; --panel2:#262a31; --line:transparent;
+    --txt:#e3e8ee; --muted:#8c94a0; --txt-faint:#7a828e;
+    --accent:#7ad9b0; --accent-dim:#57c095; --accent-deep:#1f4d3d; --accent2:#7ad9b0;
+    --on-accent:#123227; --danger:#e77b7b;
     --radius:14px;
+    --raised:6px 6px 14px var(--bg-lo), -6px -6px 14px var(--bg-hi);
+    --raised-sm:4px 4px 9px var(--bg-lo), -4px -4px 9px var(--bg-hi);
+    --raised-lg:12px 12px 28px var(--bg-lo), -12px -12px 28px var(--bg-hi);
+    --inset:inset 5px 5px 11px var(--bg-lo), inset -5px -5px 11px var(--bg-hi);
+    --inset-sm:inset 3px 3px 6px var(--bg-lo), inset -3px -3px 6px var(--bg-hi);
+    --inset-lg:inset 9px 9px 20px var(--bg-lo), inset -9px -9px 20px var(--bg-hi);
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
   html,body{margin:0; height:100%;}
   body{
     background:var(--bg); color:var(--txt);
-    font-family:-apple-system,BlinkMacSystemFont,"Avenir Next","Segoe UI",system-ui,sans-serif;
+    font-family:'Nunito', ui-rounded, 'SF Pro Rounded', -apple-system, system-ui, "Segoe UI", sans-serif;
     display:flex; flex-direction:column; overflow:hidden;
   }
   header{
-    padding:10px 16px; border-bottom:1px solid var(--line);
-    display:flex; align-items:center; gap:8px; flex:0 0 auto; flex-wrap:wrap;
+    padding:12px 16px;
+    display:flex; align-items:center; gap:10px; flex:0 0 auto; flex-wrap:wrap;
   }
-  header h1{font-size:16px; margin:0; font-weight:600; letter-spacing:.2px;}
-  header .dot{width:10px;height:10px;border-radius:50%;background:var(--accent);}
+  header h1{font-size:18px; margin:0; font-weight:800; letter-spacing:-.3px;}
+  header .dot{width:12px;height:12px;border-radius:50%;background:var(--accent);
+    box-shadow:0 0 12px rgba(122,217,176,.55);}
   header .spacer{flex:1}
   .btn{
-    background:var(--panel2); color:var(--txt); border:1px solid var(--line);
-    border-radius:10px; padding:9px 13px; font-size:14px; cursor:pointer;
-    font-family:inherit; display:inline-flex; align-items:center; gap:6px; user-select:none;
+    background:var(--bg); color:var(--txt); border:none;
+    border-radius:14px; padding:11px 17px; font-size:14px; cursor:pointer; font-weight:700;
+    font-family:inherit; display:inline-flex; align-items:center; justify-content:center; gap:6px;
+    user-select:none; box-shadow:var(--raised-sm); transition:box-shadow .12s ease;
   }
-  .btn:active{transform:scale(.97)}
-  .btn.primary{background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600;}
-  .btn.sm{padding:7px 10px; font-size:13px;}
-  .btn.ghost{background:transparent;}
-  .btn.danger{color:#fca5a5;}
+  .btn:active{box-shadow:var(--inset-sm);}
+  .btn.primary{background:var(--accent); color:var(--on-accent); font-weight:800; box-shadow:var(--raised-sm);}
+  .btn.sm{padding:9px 14px; font-size:13px;}
+  .btn.ghost{background:var(--bg); box-shadow:var(--raised-sm);}  /* soft-UI: "ghost" is still a raised chip */
+  .btn.danger{color:var(--danger);}
+  /* pressed-in mint chip = the "on" state for checkbox-style toggles (Bold / Flip) */
+  .btn.on{background:var(--accent-deep); color:var(--accent); font-weight:800; box-shadow:var(--inset-sm);}
+  /* checkbox-style toggle chip: inset square when off, filled mint check when on */
+  .btn.chk{gap:9px; padding-left:12px;}
+  .btn.chk .cbox{width:18px; height:18px; border-radius:6px; flex:0 0 auto;
+    background:var(--bg); box-shadow:var(--inset-sm); display:grid; place-items:center;}
+  .btn.chk.on .cbox{background:var(--accent); box-shadow:none;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23123227' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 13l4 4L19 7'/%3E%3C/svg%3E");
+    background-repeat:no-repeat; background-position:center;}
+  /* top-bar buttons grouped in a carved pill */
+  .topbar-actions{display:flex; align-items:center; gap:6px; padding:6px; border-radius:18px;
+    background:var(--bg); box-shadow:var(--inset); max-width:100%; overflow-x:auto;}
 
   main{flex:1; display:flex; min-height:0;}
   @media (max-width:860px){ main{flex-direction:column;} }
 
-  /* Stage */
+  /* Stage — the workspace is carved into the clay (inset well) */
   .stage{
     flex:1; display:flex; align-items:center; justify-content:center;
-    padding:16px; min-height:0; min-width:0; background:
-      radial-gradient(1200px 600px at 30% -10%, #1b1b22 0%, var(--bg) 60%);
+    padding:22px; min-height:0; min-width:0; margin:14px;
+    background:var(--bg); border-radius:26px; box-shadow:var(--inset-lg);
   }
   #canvasWrap{position:relative; height:100%; max-height:100%; display:flex;}
   canvas#preview{
-    background:#000; border-radius:8px; box-shadow:0 20px 60px rgba(0,0,0,.5);
+    background:#000; border-radius:16px; box-shadow:6px 6px 16px rgba(0,0,0,.45);
     max-height:100%; max-width:100%; height:100%; width:auto; object-fit:contain;
     touch-action:none;
   }
 
   /* Panel */
   .panel{
-    width:340px; flex:0 0 340px; border-left:1px solid var(--line);
+    width:340px; flex:0 0 340px; border-left:none;
     background:var(--panel); overflow-y:auto; padding:14px 14px 60px;
   }
   /* --- mobile chrome (hidden on desktop) --- */
   #sheetHdr{display:none;}
   #mtoolbar{display:none;}
-  .sheet-grab{width:36px; height:4px; border-radius:2px; background:var(--line); margin:0 auto 8px;}
+  .sheet-grab{width:52px; height:6px; border-radius:3px; background:var(--accent); opacity:.55; margin:0 auto 10px;}
   #sheetHdr .sheet-row{display:flex; align-items:center; justify-content:space-between;}
   #sheetTitle{font-size:13px; font-weight:600; color:var(--txt);}
 
@@ -72,29 +96,30 @@
     /* panel becomes a slide-up sheet */
     .panel{
       position:fixed; left:0; right:0; bottom:76px; width:auto; max-height:52vh;
-      border-left:none; border-top:1px solid var(--line); border-radius:16px 16px 0 0;
-      padding:10px 14px calc(16px + env(safe-area-inset-bottom,0));
+      border-left:none; border-top:none; border-radius:26px 26px 0 0;
+      padding:12px 16px calc(16px + env(safe-area-inset-bottom,0));
       transform:translateY(115%); transition:transform .22s ease; z-index:50;
-      box-shadow:0 -8px 28px rgba(0,0,0,.45);
+      box-shadow:0 -10px 30px rgba(0,0,0,.5), inset 0 1px 0 var(--bg-hi);
     }
     .panel.open{transform:translateY(0);}
     #sheetHdr{display:block; position:sticky; top:0; background:var(--panel); padding-top:2px; margin-bottom:6px; z-index:1;}
     #toolTabs{display:none;}                         /* replaced by the tool bar */
     .panel > p.hint{display:none;}                   /* drop the long footer note on mobile */
-    /* bottom tool bar */
+    /* bottom tool bar — a carved dock */
     #mtoolbar{
       display:flex; position:fixed; left:0; right:0; bottom:0; height:76px;
-      background:var(--panel); border-top:1px solid var(--line); z-index:60;
-      overflow-x:auto; gap:2px; padding:0 6px calc(env(safe-area-inset-bottom,0));
+      background:var(--bg); border-top:none; z-index:60;
+      box-shadow:0 -4px 16px rgba(0,0,0,.4), inset 0 6px 12px -8px var(--bg-lo);
+      overflow-x:auto; gap:2px; padding:8px 8px calc(8px + env(safe-area-inset-bottom,0));
       align-items:stretch; justify-content:center;                 /* keep the buttons grouped, not stretched apart */
     }
     #mtoolbar button{
-      flex:0 0 auto; width:78px; min-height:72px; background:none; border:none;
-      color:var(--muted); font-family:inherit; font-size:11.5px; font-weight:600; white-space:nowrap;
+      flex:0 0 auto; width:76px; min-height:60px; background:none; border:none; border-radius:16px;
+      color:var(--muted); font-family:inherit; font-size:11.5px; font-weight:700; white-space:nowrap;
       display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px;
     }
     #mtoolbar button svg{width:25px; height:25px; display:block;}
-    #mtoolbar button.active{color:var(--accent);}
+    #mtoolbar button.active{color:var(--accent); background:var(--accent-deep); box-shadow:var(--raised-sm); font-weight:800;}
     /* compact controls on mobile */
     .panel .row{margin-bottom:6px;}
     .panel .row .lab{width:74px; font-size:12px;}
@@ -111,75 +136,90 @@
   .group{margin-bottom:18px;}
   .group > label.title{
     display:block; font-size:11px; text-transform:uppercase; letter-spacing:.09em;
-    color:var(--muted); margin-bottom:8px; font-weight:700;
+    color:var(--txt-faint); margin-bottom:8px; font-weight:800;
   }
-  .row{display:flex; align-items:center; gap:8px; margin-bottom:9px;}
-  .row .lab{font-size:13px; color:var(--muted); width:92px; flex:0 0 auto;}
-  input[type=range]{flex:1; min-width:0; accent-color:var(--accent); height:26px;}
+  .row{display:flex; align-items:center; gap:10px; margin-bottom:11px;}
+  .row .lab{font-size:14px; font-weight:700; color:var(--muted); width:92px; flex:0 0 auto;}
+  /* Neumorphic slider — inset groove, mint fill, raised mint knob */
+  input[type=range]{
+    -webkit-appearance:none; appearance:none; flex:1; min-width:0; height:16px; border-radius:8px;
+    background:linear-gradient(90deg,var(--accent-dim),var(--accent)) no-repeat, var(--bg);
+    background-size:var(--p,50%) 100%, 100% 100%;
+    box-shadow:var(--inset-sm); cursor:pointer;
+  }
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; width:26px; height:26px; border-radius:50%;
+    background:var(--accent); box-shadow:var(--raised-sm); border:none;}
+  input[type=range]::-moz-range-thumb{width:26px; height:26px; border-radius:50%; background:var(--accent);
+    box-shadow:var(--raised-sm); border:none;}
   input[type=text]{
-    flex:1; background:var(--panel2); border:1px solid var(--line); color:var(--txt);
-    border-radius:9px; padding:9px 10px; font-size:14px; font-family:inherit; min-width:0;
+    flex:1; background:var(--bg); border:none; color:var(--txt);
+    border-radius:14px; padding:13px 16px; font-size:15px; font-weight:600; font-family:inherit; min-width:0;
+    box-shadow:var(--raised-sm);
   }
   input[type=color]{
-    width:40px; height:40px; border:1px solid var(--line); border-radius:9px;
-    background:var(--panel2); padding:2px; cursor:pointer; flex:0 0 auto;
+    width:44px; height:44px; border:none; border-radius:13px;
+    background:var(--bg); padding:5px; cursor:pointer; flex:0 0 auto; box-shadow:var(--raised-sm);
   }
-  .row .val{min-width:44px; text-align:right; font-size:12px; color:var(--muted);
-    font-variant-numeric:tabular-nums; flex:0 0 auto; cursor:text; border-radius:4px; padding:2px 4px;}
-  .row .val:hover{color:var(--txt); background:var(--panel2);}
-  .row .val[contenteditable="true"]{color:var(--txt); background:var(--panel2); outline:1px solid var(--accent);}
+  .row .val{min-width:44px; text-align:right; font-size:13px; font-weight:700; color:var(--muted);
+    font-variant-numeric:tabular-nums; flex:0 0 auto; cursor:text; border-radius:6px; padding:2px 5px;}
+  .row .val:hover{color:var(--txt);}
+  .row .val[contenteditable="true"]{color:var(--txt); background:var(--bg); box-shadow:var(--inset-sm);}
   select{
-    flex:1; background:var(--panel2); border:1px solid var(--line); color:var(--txt);
-    border-radius:9px; padding:9px 10px; font-size:14px; font-family:inherit;
+    flex:1; background:var(--bg); border:none; color:var(--txt);
+    border-radius:14px; padding:13px 40px 13px 16px; font-size:15px; font-weight:600; font-family:inherit;
+    box-shadow:var(--raised-sm); -webkit-appearance:none; appearance:none;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%238c94a0' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat:no-repeat; background-position:right 15px center;
   }
-  .layouts{display:grid; grid-template-columns:repeat(6,1fr); gap:6px;}
+  .layouts{display:grid; grid-template-columns:repeat(6,1fr); gap:8px;}
   .layouts .lay{
-    aspect-ratio:4/5; background:var(--panel2); border:1px solid var(--line);
-    border-radius:6px; cursor:pointer; position:relative; overflow:hidden; padding:3px;
+    aspect-ratio:4/5; background:var(--bg); border:none;
+    border-radius:10px; cursor:pointer; position:relative; overflow:hidden; padding:3px; box-shadow:var(--inset-sm);
   }
-  .layouts .lay.active{border-color:var(--accent); box-shadow:0 0 0 2px var(--accent) inset;}
-  .layouts .lay i{position:absolute; background:#4b4b55; border-radius:2px; display:block;}
+  .layouts .lay.active{box-shadow:var(--inset-sm), 0 0 0 2px var(--accent) inset;}
+  .layouts .lay i{position:absolute; background:var(--bg-hi); border-radius:2px; display:block;}
   .layouts .lay.active i{background:var(--accent2);}
-  .slides{display:flex; gap:8px; overflow-x:auto; padding-bottom:4px;}
+  .slides{display:flex; gap:10px; overflow-x:auto; padding:4px;}
   .slides .thumb{
-    flex:0 0 auto; width:52px; height:65px; border-radius:7px; border:1px solid var(--line);
-    background:#000; cursor:pointer; position:relative; overflow:hidden;
+    flex:0 0 auto; width:52px; height:65px; border-radius:11px; border:none;
+    background:#000; cursor:pointer; position:relative; overflow:hidden; box-shadow:var(--raised-sm);
   }
-  .slides .thumb.active{border-color:var(--accent); box-shadow:0 0 0 2px var(--accent) inset;}
+  .slides .thumb.active{box-shadow:var(--raised-sm), 0 0 0 2px var(--accent);}
   .slides .thumb canvas{width:100%; height:100%; display:block;}
   .slides .thumb .n{position:absolute; top:2px; left:4px; font-size:10px; color:#fff; text-shadow:0 1px 2px #000;}
   .addSlide{
-    flex:0 0 auto; width:52px; height:65px; border-radius:7px; border:1px dashed var(--line);
-    background:transparent; color:var(--muted); font-size:22px; cursor:pointer;
+    flex:0 0 auto; width:52px; height:65px; border-radius:11px; border:none;
+    background:var(--bg); color:var(--muted); font-size:22px; cursor:pointer; box-shadow:var(--raised-sm);
   }
   .hint{font-size:12px; color:var(--muted); line-height:1.5; margin-top:2px;}
+  /* Selected panel is carved into the sheet; the controls inside it are raised */
   .selbar{
-    background:var(--panel2); border:1px solid var(--line); border-radius:10px;
-    padding:10px; margin-bottom:14px;
+    background:var(--bg); border:none; border-radius:20px;
+    padding:18px; margin-bottom:14px; box-shadow:var(--inset-lg);
   }
-  .selbar .selhd{font-size:13px; font-weight:600; margin-bottom:10px; display:flex; align-items:center; gap:6px;}
-  .selbar .selhd svg{width:16px; height:16px;}
+  .selbar .selhd{font-size:15px; font-weight:800; margin-bottom:12px; display:flex; align-items:center; gap:8px;}
+  .selbar .selhd svg{width:18px; height:18px;}
   /* light section label inside the Selected panel */
-  .subhd{font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted);
-    font-weight:700; margin:14px 0 8px;}
-  /* segmented control — one-tap, shows the current choice (better than a dropdown for 2–4 options) */
-  .seg{display:flex; flex:1; min-width:0; background:var(--panel); border:1px solid var(--line);
-    border-radius:10px; padding:3px; gap:3px;}
+  .subhd{font-size:12px; text-transform:uppercase; letter-spacing:.1em; color:var(--txt-faint);
+    font-weight:800; margin:16px 0 10px;}
+  /* segmented control — inset track, selected segment = raised mint fill */
+  .seg{display:flex; flex:1; min-width:0; background:var(--bg); border:none;
+    border-radius:16px; padding:5px; gap:4px; box-shadow:var(--inset);}
   .seg button{flex:1; min-width:0; background:none; border:none; color:var(--muted);
-    font-family:inherit; font-size:13px; font-weight:600; padding:9px 6px; border-radius:7px;
+    font-family:inherit; font-size:13px; font-weight:700; padding:9px 6px; border-radius:12px;
     cursor:pointer; display:flex; align-items:center; justify-content:center; gap:5px; white-space:nowrap;}
   .seg button svg{width:18px; height:18px;}
-  .seg button.active{background:var(--panel2); color:var(--txt); box-shadow:0 1px 2px rgba(0,0,0,.35);}
-  /* toggle button in the "on" state (e.g. Bold) */
-  .btn.on{background:var(--accent); border-color:var(--accent); color:#fff;}
-  .twocol{display:flex; gap:8px;}
-  .fmts{display:flex; gap:8px;}
+  .seg button.active{background:var(--accent); color:var(--on-accent); font-weight:800; box-shadow:var(--raised-sm);}
+  .twocol{display:flex; gap:10px;}
+  .fmts{display:flex; gap:10px;}
   .fmts .btn{flex:1; justify-content:center;}
+  /* selected canvas-format chip = pressed-in mint */
+  #fmts .btn:not(.ghost){background:var(--accent-deep); color:var(--accent); box-shadow:var(--inset-sm);}
   /* Zone B — contextual inspector */
   #selPanel .selbar{margin-bottom:0;}
   .inspector-empty{
-    background:var(--panel2); border:1px dashed var(--line); border-radius:12px;
-    padding:14px; font-size:13px; color:var(--muted); line-height:1.5; text-align:center;
+    background:var(--bg); border:none; border-radius:18px; box-shadow:var(--inset);
+    padding:18px; font-size:13px; color:var(--muted); line-height:1.5; text-align:center;
   }
   /* Zone C — tabbed insert tools */
   .tabs{display:flex; gap:2px; border-bottom:1px solid var(--line); margin:0 0 14px; overflow-x:auto;}
@@ -204,12 +244,14 @@
   <span class="dot"></span>
   <h1>Carousel Studio</h1>
   <span class="spacer"></span>
-  <button class="btn sm ghost" id="saveProj">Save</button>
-  <button class="btn sm ghost" id="openProj">Open</button>
-  <button class="btn sm ghost" id="helpBtn">Help</button>
-  <button class="btn sm ghost" id="exportBtn">Export slide</button>
-  <button class="btn sm ghost" id="exportVidBtn">Export video</button>
-  <button class="btn primary sm" id="exportAllBtn">Export all</button>
+  <div class="topbar-actions">
+    <button class="btn sm ghost" id="saveProj">Save</button>
+    <button class="btn sm ghost" id="openProj">Open</button>
+    <button class="btn sm ghost" id="helpBtn">Help</button>
+    <button class="btn sm ghost" id="exportBtn">Export slide</button>
+    <button class="btn sm ghost" id="exportVidBtn">Export video</button>
+    <button class="btn primary sm" id="exportAllBtn">Export all</button>
+  </div>
 </header>
 
 <main>
@@ -771,7 +813,7 @@ function syncPanel(){
         <div class="row"><span class="lab">Size</span><input type="range" id="ovSize" min="5" max="150" value="${sizePct}"><span class="val"></span></div>
         <div class="row"><span class="lab">Rotate</span><input type="range" id="ovRot" min="-180" max="180" value="${Math.round(ov.rot||0)}"><span class="val"></span></div>
         <div class="twocol">
-          <button class="btn sm ghost${ov.flip?' on':''}" id="ovFlip" aria-pressed="${!!ov.flip}">Flip</button>
+          <button class="btn sm ghost chk${ov.flip?' on':''}" id="ovFlip" aria-pressed="${!!ov.flip}"><span class="cbox"></span>Flip</button>
           <button class="btn sm ghost" id="ovStraight">Straighten</button>
         </div>
         <button class="btn sm ghost danger" id="ovDel" style="width:100%; margin-top:8px;">Delete image</button>
@@ -794,7 +836,7 @@ function syncPanel(){
         <div class="row"><span class="lab">Size</span><input type="range" id="tSize" min="20" max="200" value="${t.size}"><span class="val"></span></div>
         <div class="row"><span class="lab">Color</span><input type="color" id="tColor" value="${t.color}">
           <button class="btn sm ghost" id="tBrand">Brand</button>
-          <button class="btn sm ghost${t.bold?' on':''}" id="tBold" aria-pressed="${!!t.bold}">Bold</button></div>
+          <button class="btn sm ghost chk${t.bold?' on':''}" id="tBold" aria-pressed="${!!t.bold}"><span class="cbox"></span>Bold</button></div>
         <div class="row"><span class="lab">Align</span>
           <div class="seg" id="tAlign">
             <button data-v="left" title="Left"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 5h14M3 10h9M3 15h12"/></svg></button>
@@ -1434,13 +1476,16 @@ function formatVal(r){ const u=r.dataset.unit, v=+r.value;
   if(u==='x') return v.toFixed(1)+'×';
   return String(Math.round(v));
 }
+function setSliderFill(r){ const min=+r.min||0, max=(+r.max||100);
+  const p=max>min?((+r.value-min)/(max-min))*100:50; r.style.setProperty('--p', p.toFixed(1)+'%'); }
 function refreshVals(){
   document.querySelectorAll('.panel input[type=range]').forEach(r=>{
     const o=r.parentElement.querySelector('.val'); if(o) o.textContent=formatVal(r);
+    setSliderFill(r);
   });
 }
 document.querySelector('.panel').addEventListener('input', e=>{
-  if(e.target.type==='range'){ const o=e.target.parentElement.querySelector('.val'); if(o) o.textContent=formatVal(e.target); }
+  if(e.target.type==='range'){ const o=e.target.parentElement.querySelector('.val'); if(o) o.textContent=formatVal(e.target); setSliderFill(e.target); }
 });
 // Click a number readout to type an exact value (works for every slider)
 const panelEl=document.querySelector('.panel');
