@@ -578,18 +578,13 @@ function drawScene(cx, showSel){
     const groupW = wmax + iconW;
     let gx=x; if(t.align==='center')gx=x-groupW/2; if(t.align==='right')gx=x-groupW;
 
-    // Vertical centre: for a single line, centre on the CAPS (not the ink) so a descender
-    // like 'p'/'g' doesn't push the text high in the pill. Pin aligns to the same centre.
-    const single=(lines.length===1);
-    const capsCenter=(inkTop+base0)/2;
-    const vC = single ? capsCenter : (inkTop+inkBot)/2;
+    // Pill hugs the real glyph ink with EQUAL padding all round (top of the tallest letter
+    // to the bottom of the lowest), so a descender doesn't leave extra empty space on top.
+    const vC = (inkTop+inkBot)/2;
 
     if(t.bg && t.bg!=='none'){
       const pad=(t.bgPad==null?22:t.bgPad);
-      let py, ph;
-      if(single){ const half=Math.max(capsCenter-inkTop, inkBot-capsCenter)+pad; py=capsCenter-half; ph=2*half; }
-      else { py=inkTop-pad; ph=inkH+pad*2; }
-      const px=gx-pad, pw=groupW+pad*2;
+      const px=gx-pad, py=inkTop-pad, pw=groupW+pad*2, ph=inkH+pad*2;
       cx.save(); roundRect(cx,px,py,pw,ph,(t.bgRadius==null?18:t.bgRadius)); cx.clip();
       if(t.bg==='blur') drawFrost(cx, base, t.blur||10);
       if(t.bgOpacity>0){ cx.fillStyle=hexA(t.bgColor||'#000000', t.bgOpacity); cx.fillRect(px-2,py-2,pw+4,ph+4); }
