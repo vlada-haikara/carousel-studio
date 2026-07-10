@@ -102,6 +102,11 @@
     .panel .group{margin-bottom:10px;}
     .panel .selbar{padding:8px 10px;}
     #mtoolbar button{width:72px; font-size:11px;}
+    /* comfortable touch targets inside the Selected panel */
+    #selPanel .btn.sm{min-height:44px;}
+    #selPanel input[type=color]{width:44px; height:44px;}
+    #selPanel input[type=range]{height:34px;}
+    #selPanel .seg button{min-height:42px;}
   }
   .group{margin-bottom:18px;}
   .group > label.title{
@@ -152,7 +157,21 @@
     background:var(--panel2); border:1px solid var(--line); border-radius:10px;
     padding:10px; margin-bottom:14px;
   }
-  .selbar .selhd{font-size:13px; font-weight:600; margin-bottom:8px; display:flex; align-items:center; gap:6px;}
+  .selbar .selhd{font-size:13px; font-weight:600; margin-bottom:10px; display:flex; align-items:center; gap:6px;}
+  .selbar .selhd svg{width:16px; height:16px;}
+  /* light section label inside the Selected panel */
+  .subhd{font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted);
+    font-weight:700; margin:14px 0 8px;}
+  /* segmented control — one-tap, shows the current choice (better than a dropdown for 2–4 options) */
+  .seg{display:flex; flex:1; min-width:0; background:var(--panel); border:1px solid var(--line);
+    border-radius:10px; padding:3px; gap:3px;}
+  .seg button{flex:1; min-width:0; background:none; border:none; color:var(--muted);
+    font-family:inherit; font-size:13px; font-weight:600; padding:9px 6px; border-radius:7px;
+    cursor:pointer; display:flex; align-items:center; justify-content:center; gap:5px; white-space:nowrap;}
+  .seg button svg{width:18px; height:18px;}
+  .seg button.active{background:var(--panel2); color:var(--txt); box-shadow:0 1px 2px rgba(0,0,0,.35);}
+  /* toggle button in the "on" state (e.g. Bold) */
+  .btn.on{background:var(--accent); border-color:var(--accent); color:#fff;}
   .twocol{display:flex; gap:8px;}
   .fmts{display:flex; gap:8px;}
   .fmts .btn{flex:1; justify-content:center;}
@@ -768,41 +787,50 @@ function syncPanel(){
     if(t.bg===undefined){ t.bg='none'; t.bgColor='#ffffff'; t.bgOpacity=0.9; t.blur=5; t.bgPad=22; t.bgRadius=18; }
     selPanel.innerHTML=`
       <div class="selbar">
-        <div class="selhd">Text</div>
+        <div class="selhd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7V5h14v2"/><path d="M12 5v14"/><path d="M9 19h6"/></svg>Text</div>
         <div class="row"><input type="text" id="tTxt" value="${t.text.replace(/"/g,'&quot;')}" placeholder="Type text…"></div>
         <div class="row"><span class="lab">Font</span><select id="tFont"></select></div>
+        <div class="row"><span class="lab">Size</span><input type="range" id="tSize" min="20" max="200" value="${t.size}"><span class="val"></span></div>
         <div class="row"><span class="lab">Color</span><input type="color" id="tColor" value="${t.color}">
           <button class="btn sm ghost" id="tBrand">Brand</button>
-          <button class="btn sm ghost" id="tBold">Bold</button></div>
-        <div class="row"><span class="lab">Backdrop</span>
-          <select id="tBg"><option value="none">None</option><option value="blur">Blur (frosted)</option><option value="solid">Solid</option></select></div>
+          <button class="btn sm ghost${t.bold?' on':''}" id="tBold" aria-pressed="${!!t.bold}">Bold</button></div>
+        <div class="row"><span class="lab">Align</span>
+          <div class="seg" id="tAlign">
+            <button data-v="left" title="Left"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 5h14M3 10h9M3 15h12"/></svg></button>
+            <button data-v="center" title="Center"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 5h14M5.5 10h9M4 15h12"/></svg></button>
+            <button data-v="right" title="Right"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 5h14M8 10h9M5 15h12"/></svg></button>
+          </div></div>
+        <div class="subhd">Backdrop</div>
+        <div class="row"><div class="seg" id="tBg">
+            <button data-v="none">None</button>
+            <button data-v="blur">Blur</button>
+            <button data-v="solid">Solid</button>
+          </div></div>
         <div class="row" id="tBlurRow"><span class="lab">Blur</span><input type="range" id="tBlur" min="2" max="40" value="${t.blur}"><span class="val"></span></div>
         <div class="row" id="tTintRow"><span class="lab">Tint</span><input type="color" id="tBgColor" value="${t.bgColor}">
           <input type="range" id="tBgOpacity" data-unit="%" min="0" max="1" step="0.01" value="${t.bgOpacity}" title="Tint strength"><span class="val"></span></div>
-        <button class="btn sm ghost" id="tMoreBtn" style="width:100%; margin:4px 0 8px;">${textMoreOpen?'Less settings ▴':'More settings ▾'}</button>
+        <button class="btn sm ghost" id="tMoreBtn" style="width:100%; margin:8px 0;">${textMoreOpen?'Less settings ▴':'More settings ▾'}</button>
         <div id="tMore" style="display:${textMoreOpen?'block':'none'}">
-          <div class="row"><span class="lab">Size</span><input type="range" id="tSize" min="20" max="200" value="${t.size}"><span class="val"></span></div>
-          <div class="row"><span class="lab">Align</span>
-            <select id="tAlign"><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select></div>
           <div class="row"><span class="lab">Curve</span><input type="range" id="tCurve" min="-180" max="180" value="${t.curve||0}"><button class="btn sm ghost" id="tCurveReset" title="Straighten (set to 0)">Straighten</button><span class="val"></span></div>
           <div class="row"><span class="lab">Padding</span><input type="range" id="tBgPad" min="0" max="70" value="${t.bgPad}"><span class="val"></span></div>
           <div class="row"><span class="lab">Bg corners</span><input type="range" id="tBgRadius" min="0" max="90" value="${t.bgRadius}"><span class="val"></span></div>
           ${t.bg!=='none'?'<button class="btn sm" id="tSwap" style="width:100%; margin-bottom:8px;">Swap text ⇄ backdrop colours</button>':''}
         </div>
-        <button class="btn sm ghost danger" id="tDel" style="width:100%">Delete text</button>
+        <button class="btn sm ghost danger" id="tDel" style="width:100%; margin-top:10px;">Delete text</button>
       </div>`;
     const tf=document.getElementById('tFont');
     allFonts().forEach(f=>{ const o=document.createElement('option'); o.value=f; o.textContent=f+(FONTS.includes(f)?'':' ✦'); o.style.fontFamily=f; tf.appendChild(o); });
     tf.value=t.font;
     tf.onchange=e=>{ t.font=e.target.value; S().font=e.target.value; render(); };
-    document.getElementById('tAlign').value=t.align;
-    document.getElementById('tBg').value=t.bg;
+    const alignSeg=document.getElementById('tAlign'), bgSeg=document.getElementById('tBg');
+    const setSeg=(seg,val)=>[...seg.children].forEach(b=>b.classList.toggle('active', b.dataset.v===val));
+    setSeg(alignSeg, t.align); setSeg(bgSeg, t.bg);
     document.getElementById('tMoreBtn').onclick=()=>{
       textMoreOpen=!textMoreOpen;
       document.getElementById('tMore').style.display=textMoreOpen?'block':'none';
       document.getElementById('tMoreBtn').textContent=textMoreOpen?'Less settings ▴':'More settings ▾';
     };
-    const syncBg=()=>{ const bg=document.getElementById('tBg').value;
+    const syncBg=()=>{ const bg=t.bg;
       document.getElementById('tBlurRow').style.display = (bg==='blur')?'flex':'none';
       document.getElementById('tTintRow').style.display = (bg!=='none')?'flex':'none';
     };
@@ -811,8 +839,9 @@ function syncPanel(){
     document.getElementById('tSize').oninput=e=>{t.size=+e.target.value; render();};
     document.getElementById('tColor').oninput=e=>{t.color=e.target.value; render();};
     document.getElementById('tBrand').onclick=()=>{t.color=S().brand; document.getElementById('tColor').value=t.color; render();};
-    document.getElementById('tBold').onclick=()=>{t.bold=!t.bold; render();};
-    document.getElementById('tAlign').onchange=e=>{t.align=e.target.value; render();};
+    const boldBtn=document.getElementById('tBold');
+    boldBtn.onclick=()=>{ t.bold=!t.bold; boldBtn.classList.toggle('on', t.bold); boldBtn.setAttribute('aria-pressed', !!t.bold); render(); };
+    alignSeg.onclick=e=>{ const b=e.target.closest('button'); if(!b||!b.dataset.v)return; t.align=b.dataset.v; setSeg(alignSeg,t.align); render(); };
     document.getElementById('tCurve').oninput=e=>{
       let v=+e.target.value; if(Math.abs(v)<6){ v=0; e.target.value=0; }   // snap to straight near centre
       t.curve=v; render();
@@ -822,11 +851,11 @@ function syncPanel(){
       t.curve=0; const c=document.getElementById('tCurve'); c.value=0; render();
       const o=c.parentElement.querySelector('.val'); if(o) o.textContent=formatVal(c);
     };
-    document.getElementById('tBg').onchange=e=>{
-      t.bg=e.target.value;
+    bgSeg.onclick=e=>{ const b=e.target.closest('button'); if(!b||!b.dataset.v)return;
+      t.bg=b.dataset.v;
       if(t.bg==='solid') t.bgOpacity=1;                          // solid → full tint
       else if(t.bg==='blur'){ t.bgColor='#ffffff'; t.blur=5; t.bgOpacity=0.18; }  // blur → subtle white frost
-      syncBg(); render(); syncPanel();
+      setSeg(bgSeg,t.bg); syncBg(); render(); syncPanel();
     };
     document.getElementById('tBlur').oninput=e=>{t.blur=+e.target.value; render();};
     document.getElementById('tBgColor').oninput=e=>{t.bgColor=e.target.value; render();};
