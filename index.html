@@ -425,12 +425,29 @@ function roundRect(cx,x,y,w,h,r){
 
 // ---- Render ----
 let _base=null;
+let renderScale=1;                 // >1 only during high-resolution export (supersample)
+const EXPORT_SCALE=2;              // export at 2× so zooming in isn't pixelated
 function getBase(){ if(!_base){_base=document.createElement('canvas');_base.width=W;_base.height=H;} return _base; }
 function hexA(hex,a){ const n=parseInt(hex.slice(1),16); return 'rgba('+((n>>16)&255)+','+((n>>8)&255)+','+(n&255)+','+a+')'; }
 function fontStr(t){ return (t.bold?'700 ':'')+t.size+'px "'+t.font+'"'; }
 // media dimensions work for both <img> (naturalWidth) and <video> (videoWidth)
 function mW(m){ return m.videoWidth || m.naturalWidth || m.width || 1; }
 function mH(m){ return m.videoHeight || m.naturalHeight || m.height || 1; }
+let _blurBuf=null; function getBlurBuf(){ if(!_blurBuf)_blurBuf=document.createElement('canvas'); return _blurBuf; }
+// Frosted-glass blur via multi-pass downscale→upscale. Avoids canvas ctx.filter (flaky on
+// Safari, esp. inside a clip) so it works on every device and updates live with the slider.
+function drawFrost(cx, base, blur){
+  const scale=Math.max(0.02, 1/(1+blur*0.9));
+  const tw=Math.max(2,Math.round(W*scale)), th=Math.max(2,Math.round(H*scale));
+  const tmp=getBlurBuf(); if(tmp.width!==tw||tmp.height!==th){ tmp.width=tw; tmp.height=th; }
+  const tctx=tmp.getContext('2d');
+  tctx.imageSmoothingEnabled=true; tctx.imageSmoothingQuality='high';
+  tctx.clearRect(0,0,tw,th); tctx.drawImage(base,0,0,tw,th);
+  // second pass smooths the blocky look
+  tctx.drawImage(tmp,0,0,tw,th, 0,0,Math.max(2,Math.round(tw*0.6)),Math.max(2,Math.round(th*0.6)));
+  cx.imageSmoothingEnabled=true; cx.imageSmoothingQuality='high';
+  cx.drawImage(tmp, 0,0,Math.max(2,Math.round(tw*0.6)),Math.max(2,Math.round(th*0.6)), 0,0,W,H);
+}
 // Vector sticker icons drawn in the text colour (so they look like real IG stickers, not emoji).
 // Instagram-style pin as a baked PNG (white on transparent) — drawn as an image and
 // recoloured to the text colour, so it renders identically on every device.
@@ -489,10 +506,13 @@ function curveBox(t){
 function drawScene(cx, showSel){
   const s=S();
   // --- base layer (background + photos + frames) drawn offscreen so text backdrops can sample it ---
-  const base=getBase(); const b=base.getContext('2d');
+  const base=getBase();
+  const RW=Math.round(W*renderScale), RH=Math.round(H*renderScale);
+  if(base.width!==RW || base.height!==RH){ base.width=RW; base.height=RH; }   // base matches render resolution
+  const b=base.getContext('2d');
   b.imageSmoothingEnabled=true; b.imageSmoothingQuality='high';       // sharp photo downscaling
   cx.imageSmoothingEnabled=true; cx.imageSmoothingQuality='high';
-  b.setTransform(1,0,0,1,0,0); b.clearRect(0,0,W,H);
+  b.setTransform(renderScale,0,0,renderScale,0,0); b.clearRect(0,0,W,H);
   b.fillStyle=s.bg; b.fillRect(0,0,W,H);
   if(s.bgImg){ drawCover(b,s.bgImg,0,0,W,H); }
   const cells=LAYOUTS[s.layout].cells;
@@ -512,7 +532,7 @@ function drawScene(cx, showSel){
       b.lineWidth=s.frame; b.strokeStyle=s.brand; b.stroke(); b.restore();
     }
   });
-  cx.drawImage(base,0,0);
+  cx.drawImage(base,0,0,W,H);        // base is RW×RH; draw into W×H logical units (scales with cx transform)
 
   // cell selection outline (on top, unblurred)
   if(showSel && sel&&sel.type==='cell'){
@@ -571,7 +591,7 @@ function drawScene(cx, showSel){
       else { py=inkTop-pad; ph=inkH+pad*2; }
       const px=gx-pad, pw=groupW+pad*2;
       cx.save(); roundRect(cx,px,py,pw,ph,(t.bgRadius==null?18:t.bgRadius)); cx.clip();
-      if(t.bg==='blur'){ cx.filter='blur('+(t.blur||10)+'px)'; cx.drawImage(base,0,0); cx.filter='none'; }
+      if(t.bg==='blur') drawFrost(cx, base, t.blur||10);
       if(t.bgOpacity>0){ cx.fillStyle=hexA(t.bgColor||'#000000', t.bgOpacity); cx.fillRect(px-2,py-2,pw+4,ph+4); }
       cx.restore();
     }
@@ -1076,14 +1096,27 @@ photoInput.onchange=e=>{
   }else{
     const rd=new FileReader();
     rd.onload=()=>{
-      const src=rd.result, img=new Image();
-      img.onload=()=>{ const c=S().cells[photoTarget]; c.img=img; c.isVideo=false; c.src=src; c.scale=1; c.ox=0; c.oy=0; render(); };
-      img.src=src;
+      const src=rd.result;
+      loadHQImage(f, src, img=>{ const c=S().cells[photoTarget]; c.img=img; c.isVideo=false; c.src=src; c.scale=1; c.ox=0; c.oy=0; render(); });
     };
     rd.readAsDataURL(f);
   }
   photoInput.value='';
 };
+// Decode a photo at high quality; very large images are cleanly resized so canvas draws
+// them crisply (iOS Safari otherwise downsamples big images and they look soft).
+function loadHQImage(file, src, cb){
+  if(!window.createImageBitmap){ const im=new Image(); im.onload=()=>cb(im); im.src=src; return; }
+  const MAX=2600;
+  createImageBitmap(file).then(bmp=>{
+    const mx=Math.max(bmp.width, bmp.height);
+    if(mx>MAX){ const s=MAX/mx;
+      return createImageBitmap(file,{resizeWidth:Math.round(bmp.width*s), resizeHeight:Math.round(bmp.height*s), resizeQuality:'high'})
+        .then(r=>{ try{bmp.close();}catch(e){} return r; });
+    }
+    return bmp;
+  }).then(cb).catch(()=>{ const im=new Image(); im.onload=()=>cb(im); im.src=src; });
+}
 
 // ---- Background image ----
 const bgInput=document.getElementById('bgInput');
@@ -1174,9 +1207,12 @@ document.getElementById('delSlide').onclick=()=>{
 
 // ---- Export ----
 function exportSlide(i,cb){
-  const off=document.createElement('canvas'); off.width=W; off.height=H;
-  const c=off.getContext('2d'); const old=cur; cur=i;
-  drawScene(c,false); cur=old;
+  const off=document.createElement('canvas'); off.width=Math.round(W*EXPORT_SCALE); off.height=Math.round(H*EXPORT_SCALE);
+  const c=off.getContext('2d'); c.imageSmoothingEnabled=true; c.imageSmoothingQuality='high';
+  c.scale(EXPORT_SCALE, EXPORT_SCALE);
+  const old=cur; cur=i; renderScale=EXPORT_SCALE;
+  drawScene(c,false);
+  renderScale=1; cur=old; render();                    // restore the live preview base to 1×
   off.toBlob(b=>{
     const a=document.createElement('a');
     a.href=URL.createObjectURL(b); a.download='carousel-slide-'+(i+1)+'.png';
