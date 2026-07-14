@@ -231,6 +231,24 @@
   .layer-row .lr-center svg{width:18px; height:18px;}
   .layers-empty{background:var(--glass-fill-weak); border:1px solid var(--glass-border); border-radius:14px;
     padding:16px; font-size:13px; color:var(--muted); line-height:1.5; text-align:center;}
+  /* Style presets — tappable chips, each shown in its own font */
+  .style-list{display:flex; flex-wrap:wrap; gap:8px;}
+  .style-chip{position:relative; display:flex; align-items:center; gap:8px; min-height:44px;
+    background:var(--glass-fill-weak); border:1px solid var(--glass-border); border-radius:12px;
+    padding:11px 13px; color:var(--txt); font-family:inherit; font-size:15px; font-weight:600; cursor:pointer;}
+  .style-chip:active{transform:scale(.97);}
+  .style-chip .sc-del{display:inline-grid; place-items:center; width:20px; height:20px; border-radius:50%;
+    background:var(--danger-fill); color:var(--danger); border:1px solid var(--danger-border); font-size:14px; line-height:1;}
+  /* Contrast checker readout inside the Text panel */
+  .contrast{margin:10px 0 4px; padding:10px 12px; border-radius:12px; background:var(--glass-fill-weak);
+    border:1px solid var(--glass-border);}
+  .contrast .cr-top{display:flex; align-items:baseline; gap:8px; margin-bottom:8px;}
+  .contrast .cr-ratio{font-size:20px; font-weight:800; font-variant-numeric:tabular-nums; color:var(--txt);}
+  .contrast .cr-cap{font-size:11px; color:var(--txt-faint);}
+  .contrast .cr-badges{display:flex; gap:6px; flex-wrap:wrap;}
+  .contrast .cr-b{font-size:11px; font-weight:800; padding:4px 8px; border-radius:8px; letter-spacing:.02em;}
+  .contrast .cr-b.pass{color:#0f3d2a; background:#7ee2b8; border:1px solid transparent;}
+  .contrast .cr-b.fail{color:var(--danger); background:var(--danger-fill); border:1px solid var(--danger-border);}
   .hint{font-size:12px; color:var(--muted); line-height:1.5; margin-top:2px;}
   /* Selected panel — a translucent glass card on the sheet (the sheet supplies the blur) */
   .selbar{
@@ -340,6 +358,14 @@
       <div class="layers-list" id="layersList"></div>
     </div>
 
+    <!-- ZONE C · style presets (saveable text looks) -->
+    <div class="group" id="grpStyle">
+      <label class="title">Style presets</label>
+      <div class="style-list" id="styleList"></div>
+      <button class="btn sm ghost" id="saveStyle" style="width:100%; margin-top:10px;">Save selected text as a style…</button>
+      <p class="hint">Tap a style to restyle the selected text, or to start new text in that look. Your saved styles stay on this device.</p>
+    </div>
+
     <!-- ZONE C · tabbed insert tools -->
     <div class="tabs" id="toolTabs">
       <button data-tab="layout" class="active">Layout</button>
@@ -412,6 +438,7 @@
   <button data-tool="stickers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5a4.5 4.5 0 0 0 7 0"/><circle cx="9" cy="10" r=".8" fill="currentColor" stroke="none"/><circle cx="15" cy="10" r=".8" fill="currentColor" stroke="none"/></svg><span>Stickers</span></button>
   <button data-tool="bg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c0 0 6 6.4 6 10.5a6 6 0 0 1-12 0C6 9.4 12 3 12 3z"/></svg><span>Background</span></button>
   <button data-tool="layers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg><span>Layers</span></button>
+  <button data-tool="style"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16"/><path d="M7 16l5-11 5 11"/><path d="M8.5 12.5h7"/></svg><span>Style</span></button>
   <button data-tool="format"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h9"/><path d="M17 7h3"/><circle cx="15" cy="7" r="2"/><path d="M4 17h3"/><path d="M11 17h9"/><circle cx="9" cy="17" r="2"/></svg><span>Format</span></button>
 </nav>
 
@@ -924,6 +951,77 @@ function endLayerDrag(){ if(!layerDrag) return; layerDrag.row.classList.remove('
 document.addEventListener('pointerup', endLayerDrag);
 document.addEventListener('pointercancel', endLayerDrag);
 
+// ---- Contrast checker (WCAG) for the selected text ----
+function hexToRgb(hex){ hex=(hex||'#000000').replace('#',''); if(hex.length===3) hex=hex.split('').map(c=>c+c).join(''); const n=parseInt(hex,16); return [(n>>16)&255,(n>>8)&255,n&255]; }
+function relLum(rgb){ const a=rgb.map(v=>{ v/=255; return v<=0.03928? v/12.92 : Math.pow((v+0.055)/1.055,2.4); }); return 0.2126*a[0]+0.7152*a[1]+0.0722*a[2]; }
+function contrastRatio(a,b){ const L1=relLum(a), L2=relLum(b), hi=Math.max(L1,L2), lo=Math.min(L1,L2); return (hi+0.05)/(lo+0.05); }
+function sampleBaseRgb(cx0, cy0, rad){                 // average colour of the background behind a spot
+  const base=getBase(); if(!base) return [128,128,128];
+  const b=base.getContext('2d');
+  const x=Math.max(0,Math.min(W-1, Math.round(cx0-rad))), y=Math.max(0,Math.min(H-1, Math.round(cy0-rad)));
+  const w=Math.max(1,Math.min(W-x, Math.round(rad*2))), h=Math.max(1,Math.min(H-y, Math.round(rad*2)));
+  let d; try{ d=b.getImageData(x,y,w,h).data; }catch(e){ return [128,128,128]; }
+  let r=0,g=0,bl=0,n=0; for(let i=0;i<d.length;i+=4){ r+=d[i]; g+=d[i+1]; bl+=d[i+2]; n++; }
+  return n? [r/n,g/n,bl/n] : [128,128,128];
+}
+function textBgRgb(t){                                  // effective colour directly under the text
+  let bg=sampleBaseRgb(t.x*W, t.y*H + t.size*0.3, Math.max(20, t.size));
+  if(t.bg==='solid' || t.bg==='blur'){
+    const tint=hexToRgb(t.bgColor||'#000000');
+    const a=Math.max(0,Math.min(1, t.bg==='solid'?(t.bgOpacity==null?1:t.bgOpacity):(t.bgOpacity||0)));
+    bg=[tint[0]*a+bg[0]*(1-a), tint[1]*a+bg[1]*(1-a), tint[2]*a+bg[2]*(1-a)];
+  }
+  return bg;
+}
+function updateContrast(t){
+  const box=document.getElementById('contrastBox'); if(!box||!t) return;
+  const ratio=contrastRatio(hexToRgb(t.color), textBgRgb(t));
+  const mk=(label,pass)=>'<span class="cr-b '+(pass?'pass':'fail')+'">'+label+' '+(pass?'✓':'✗')+'</span>';
+  const cap=(t.bg==='none')?'vs. photo / background behind':(t.bg==='blur'?'vs. blurred backdrop':'vs. backdrop');
+  box.innerHTML='<div class="cr-top"><span class="cr-ratio">'+ratio.toFixed(2)+':1</span><span class="cr-cap">'+cap+'</span></div>'+
+    '<div class="cr-badges">'+mk('AA large 3:1', ratio>=3)+mk('AA 4.5:1', ratio>=4.5)+mk('AAA 7:1', ratio>=7)+'</div>';
+}
+
+// ---- Style presets (saveable text looks) ----
+const STYLE_KEYS=['font','size','color','bold','align','curve','bg','bgColor','bgOpacity','blur','bgPad','bgPadY','bgRadius'];
+const BUILTIN_STYLES=[
+  {name:'Heading', style:{font:'Futura',      size:130, color:'#ffffff', bold:true,  align:'center', bg:'none',  bgColor:'#000000', bgOpacity:1, blur:5, bgPad:22, bgPadY:16, bgRadius:18, curve:0}},
+  {name:'Subhead', style:{font:'Avenir Next', size:78,  color:'#ffffff', bold:false, align:'center', bg:'none',  bgColor:'#000000', bgOpacity:1, blur:5, bgPad:22, bgPadY:16, bgRadius:18, curve:0}},
+  {name:'Body',    style:{font:'Georgia',     size:46,  color:'#ffffff', bold:false, align:'left',   bg:'none',  bgColor:'#000000', bgOpacity:1, blur:5, bgPad:22, bgPadY:16, bgRadius:18, curve:0}},
+  {name:'Pill',    style:{font:'Avenir Next', size:48,  color:'#111111', bold:false, align:'center', bg:'solid', bgColor:'#ffffff', bgOpacity:1, blur:5, bgPad:28, bgPadY:16, bgRadius:44, curve:0}},
+];
+let customStyles=[]; try{ customStyles=JSON.parse(localStorage.getItem('textStyles')||'[]')||[]; }catch(e){ customStyles=[]; }
+function saveCustomStyles(){ try{ localStorage.setItem('textStyles', JSON.stringify(customStyles)); }catch(e){} }
+function allStyles(){ return BUILTIN_STYLES.concat(customStyles.map(s=>Object.assign({custom:true}, s))); }
+function applyStyleTo(t, style){ STYLE_KEYS.forEach(k=>{ if(style[k]!==undefined) t[k]=style[k]; }); }
+function styleFromText(t){ const o={}; STYLE_KEYS.forEach(k=>{ if(t[k]!==undefined) o[k]=t[k]; }); return o; }
+function useStyle(style){
+  if(sel && sel.type==='text'){ applyStyleTo(S().texts[sel.i], style); if(style.font) S().font=style.font; render(); syncPanel(); }
+  else { addTextObj(style); startEdit(S().texts.length-1); }     // nothing selected → new text in that style
+}
+function deleteCustomStyle(name){ if(!confirm('Delete the “'+name+'” style?')) return; customStyles=customStyles.filter(s=>s.name!==name); saveCustomStyles(); buildStyleList(); }
+function buildStyleList(){
+  const el=document.getElementById('styleList'); if(!el) return;
+  el.innerHTML='';
+  allStyles().forEach(p=>{
+    const chip=document.createElement('button'); chip.className='style-chip';
+    chip.innerHTML='<span class="sc-name"></span>'+(p.custom?'<span class="sc-del" title="Delete style">×</span>':'');
+    const nm=chip.querySelector('.sc-name'); nm.textContent=p.name;
+    if(p.style.font) nm.style.fontFamily='"'+p.style.font+'"';
+    if(p.style.bold) nm.style.fontWeight='700';
+    chip.onclick=e=>{ if(e.target.closest('.sc-del')){ e.stopPropagation(); deleteCustomStyle(p.name); return; } useStyle(p.style); };
+    el.appendChild(chip);
+  });
+}
+document.getElementById('saveStyle').onclick=()=>{
+  if(!sel || sel.type!=='text'){ alert('Select a text first, then save its look as a style.'); return; }
+  const name=prompt('Name this style (e.g. Heading, Quote, Caption):'); if(name==null) return;
+  const nm=name.trim(); if(!nm) return;
+  customStyles=customStyles.filter(s=>s.name!==nm);            // overwrite one with the same name
+  customStyles.push({name:nm, style:styleFromText(S().texts[sel.i])});
+  saveCustomStyles(); buildStyleList();
+};
+
 // ---- Selection panel (contextual) ----
 const selPanel=document.getElementById('selPanel');
 // Layer (stacking-order) controls — shared by the Text and Image panels
@@ -1019,6 +1117,7 @@ function syncPanel(){
         <div class="row"><span class="lab">Size</span><input type="range" id="tSize" min="20" max="200" value="${t.size}"><span class="val"></span></div>
         <div class="row"><span class="lab">Color</span><input type="color" id="tColor" value="${t.color}">
           <button class="btn sm ghost chk${t.bold?' on':''}" id="tBold" aria-pressed="${!!t.bold}"><span class="cbox"></span>Bold</button></div>
+        <div class="contrast" id="contrastBox"></div>
         <div class="row"><span class="lab">Align</span>
           <div class="seg" id="tAlign">
             <button data-v="left" title="Left"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 5h14M3 10h9M3 15h12"/></svg></button>
@@ -1102,6 +1201,7 @@ function syncPanel(){
     bindLayerButtons();
     const _sw=document.getElementById('tSwap'); if(_sw) _sw.onclick=()=>{ const c=t.color; t.color=t.bgColor; t.bgColor=c; render(); syncPanel(); };
     document.getElementById('tDel').onclick=()=>{S().texts.splice(sel.i,1); sel=null; render(); syncPanel();};
+    requestAnimationFrame(()=>updateContrast(t));    // measure after the canvas has drawn
   }
 }
 
@@ -1714,6 +1814,7 @@ function refreshVals(){
 }
 document.querySelector('.panel').addEventListener('input', e=>{
   if(e.target.type==='range'){ const o=e.target.parentElement.querySelector('.val'); if(o) o.textContent=formatVal(e.target); setSliderFill(e.target); }
+  if(sel && sel.type==='text') updateContrast(S().texts[sel.i]);   // live contrast as you tweak colour/backdrop
 });
 // Click a number readout to type an exact value (works for every slider)
 const panelEl=document.querySelector('.panel');
@@ -1755,17 +1856,18 @@ const MQ=matchMedia('(max-width:860px)');
 function isMobile(){ return MQ.matches; }
 let sheetName=null, lastSelKey='', sheetExpanded=false;
 let sheetJustOpened=0, lastToolTap=0;      // guards against a sheet opening then instantly closing
-const TOOL_TITLES={slides:'Slides', layout:'Layout', photos:'Photos', text:'Text', stickers:'Stickers', bg:'Background', layers:'Layers', format:'Canvas format', selected:'Edit selected'};
+const TOOL_TITLES={slides:'Slides', layout:'Layout', photos:'Photos', text:'Text', stickers:'Stickers', bg:'Background', layers:'Layers', style:'Style presets', format:'Canvas format', selected:'Edit selected'};
 const TAB_TOOLS=['layout','photos','text','stickers','bg'];
 function sectionEl(name){
   if(name==='format') return document.getElementById('grpFormat');
   if(name==='selected') return document.getElementById('grpSelected');
   if(name==='slides') return document.getElementById('grpSlides');
   if(name==='layers') return document.getElementById('grpLayers');
+  if(name==='style') return document.getElementById('grpStyle');
   return document.querySelector('.panel .tabpane[data-pane="'+name+'"]');
 }
 function showOnlySection(name){
-  ['grpFormat','grpSelected','grpSlides','grpLayers'].forEach(id=>{ const e=document.getElementById(id); if(e) e.style.display='none'; });
+  ['grpFormat','grpSelected','grpSlides','grpLayers','grpStyle'].forEach(id=>{ const e=document.getElementById(id); if(e) e.style.display='none'; });
   document.querySelectorAll('.panel .tabpane').forEach(p=>p.style.display='none');
   const el=sectionEl(name); if(el) el.style.display='';
 }
@@ -1803,7 +1905,7 @@ window.addEventListener('resize', ()=>requestAnimationFrame(fitCanvasToSheet));
 function applyMode(){
   if(isMobile()){ closeSheet(); }
   else{
-    ['grpFormat','grpSelected','grpSlides','grpLayers'].forEach(id=>{ const e=document.getElementById(id); if(e) e.style.display=''; });
+    ['grpFormat','grpSelected','grpSlides','grpLayers','grpStyle'].forEach(id=>{ const e=document.getElementById(id); if(e) e.style.display=''; });
     document.querySelector('.panel').classList.remove('open');
     document.querySelectorAll('#mtoolbar button').forEach(b=>b.classList.remove('active'));
     showTab(currentTab);
@@ -1843,7 +1945,7 @@ function mobileSyncSelection(){
 }
 
 // ---- Init ----
-buildLayouts(); buildSlidesBar(); render(); syncPanel(); applyMode();
+buildLayouts(); buildSlidesBar(); buildStyleList(); render(); syncPanel(); applyMode();
 
 // Keep the home-screen app auto-updating online, and working offline.
 // (Skipped on file:// — service workers need http/https.)
