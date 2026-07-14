@@ -239,12 +239,23 @@
   .style-chip:active{transform:scale(.97);}
   .style-chip .sc-del{display:inline-grid; place-items:center; width:20px; height:20px; border-radius:50%;
     background:var(--danger-fill); color:var(--danger); border:1px solid var(--danger-border); font-size:14px; line-height:1;}
+  /* Style editor live preview (over a busy backdrop so blur/opacity read) */
+  .se-preview{margin:14px 0; min-height:92px; border-radius:14px; display:flex; align-items:center; justify-content:center;
+    padding:8px; overflow:hidden; border:1px solid var(--glass-border);
+    background:linear-gradient(135deg,#1e8f5e 0%,#12684a 45%,#0b3e6b 100%);}
+  .se-preview span{display:inline-block; max-width:92%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; line-height:1.15;}
   /* Contrast checker readout inside the Text panel */
-  .contrast{margin:10px 0 4px; padding:10px 12px; border-radius:12px; background:var(--glass-fill-weak);
+  .contrast{margin:10px 0 4px; padding:11px 12px; border-radius:12px; background:var(--glass-fill-weak);
     border:1px solid var(--glass-border);}
-  .contrast .cr-top{display:flex; align-items:baseline; gap:8px; margin-bottom:8px;}
+  .contrast .cr-head{font-size:11px; text-transform:uppercase; letter-spacing:.09em; color:var(--txt-faint);
+    font-weight:800; margin-bottom:8px;}
+  .contrast .cr-top{display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:wrap;}
   .contrast .cr-ratio{font-size:20px; font-weight:800; font-variant-numeric:tabular-nums; color:var(--txt);}
-  .contrast .cr-cap{font-size:11px; color:var(--txt-faint);}
+  .contrast .cr-verdict{font-size:12px; font-weight:800; padding:3px 9px; border-radius:8px;}
+  .contrast .cr-verdict.ok{color:#0f3d2a; background:#7ee2b8;}
+  .contrast .cr-verdict.warn{color:#4a3800; background:#f5d675;}
+  .contrast .cr-verdict.bad{color:var(--danger); background:var(--danger-fill); border:1px solid var(--danger-border);}
+  .contrast .cr-note{font-size:11px; color:var(--muted); line-height:1.45; margin-top:8px;}
   .contrast .cr-badges{display:flex; gap:6px; flex-wrap:wrap;}
   .contrast .cr-b{font-size:11px; font-weight:800; padding:4px 8px; border-radius:8px; letter-spacing:.02em;}
   .contrast .cr-b.pass{color:#0f3d2a; background:#7ee2b8; border:1px solid transparent;}
@@ -383,8 +394,42 @@
     <div class="group" id="grpStyle">
       <label class="title">Style presets</label>
       <div class="style-list" id="styleList"></div>
-      <button class="btn sm ghost" id="saveStyle" style="width:100%; margin-top:10px;">Save selected text as a style…</button>
-      <p class="hint">Tap a style to restyle the selected text, or to start new text in that look. Your saved styles stay on this device.</p>
+      <p class="hint">Tap a style to restyle the selected text, or to start new text in that look.</p>
+
+      <div class="subhd">Create / edit a style</div>
+      <div class="selbar" id="styleEditor">
+        <div class="row"><span class="lab">Edit</span><select id="seWhich"></select></div>
+        <div class="row"><input type="text" id="seName" placeholder="Style name (e.g. Heading)"></div>
+        <div class="row"><span class="lab">Font</span><select id="seFont"></select></div>
+        <div class="row"><span class="lab">Size</span><input type="range" id="seSize" min="20" max="200"><span class="val"></span></div>
+        <div class="row"><span class="lab">Color</span><input type="color" id="seColor">
+          <button class="btn sm ghost chk" id="seBold" aria-pressed="false"><span class="cbox"></span>Bold</button></div>
+        <div class="row"><span class="lab">Align</span>
+          <div class="seg" id="seAlign">
+            <button data-v="left" title="Left"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 5h14M3 10h9M3 15h12"/></svg></button>
+            <button data-v="center" title="Center"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 5h14M5.5 10h9M4 15h12"/></svg></button>
+            <button data-v="right" title="Right"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 5h14M8 10h9M5 15h12"/></svg></button>
+          </div></div>
+        <div class="subhd" style="margin-top:12px;">Backdrop</div>
+        <div class="row"><div class="seg" id="seBg">
+            <button data-v="none">None</button>
+            <button data-v="blur">Blur</button>
+            <button data-v="solid">Solid</button>
+          </div></div>
+        <div class="row" id="seBlurRow"><span class="lab">Blur</span><input type="range" id="seBlur" min="2" max="40"><span class="val"></span></div>
+        <div class="row" id="seTintRow"><span class="lab">Tint</span><input type="color" id="seBgColor">
+          <input type="range" id="seBgOpacity" data-unit="%" min="0" max="1" step="0.01" title="Tint strength"><span class="val"></span></div>
+        <div class="row"><span class="lab">Corners</span><input type="range" id="seRadius" min="0" max="90"><span class="val"></span></div>
+        <div class="row"><span class="lab">Padding ↔</span><input type="range" id="sePad" min="0" max="70"><span class="val"></span></div>
+        <div class="row"><span class="lab">Padding ↕</span><input type="range" id="sePadY" min="0" max="70"><span class="val"></span></div>
+        <div class="se-preview" id="sePreview"><span>Sample text</span></div>
+        <div class="twocol">
+          <button class="btn sm" id="seSaveBtn">Save style</button>
+          <button class="btn sm ghost danger" id="seDelBtn" style="display:none;">Delete style</button>
+        </div>
+        <button class="btn sm ghost" id="saveStyle" style="width:100%; margin-top:8px;">Copy look from selected text</button>
+      </div>
+      <p class="hint">Saved styles stay on this device. “Copy look from selected text” fills these controls from the text you have selected.</p>
     </div>
 
     <!-- ZONE C · tabbed insert tools -->
@@ -1011,9 +1056,18 @@ function updateContrast(t){
   const box=document.getElementById('contrastBox'); if(!box||!t) return;
   const ratio=contrastRatio(hexToRgb(t.color), textBgRgb(t));
   const mk=(label,pass)=>'<span class="cr-b '+(pass?'pass':'fail')+'">'+label+' '+(pass?'✓':'✗')+'</span>';
-  const cap=(t.bg==='none')?'vs. photo / background behind':(t.bg==='blur'?'vs. blurred backdrop':'vs. backdrop');
-  box.innerHTML='<div class="cr-top"><span class="cr-ratio">'+ratio.toFixed(2)+':1</span><span class="cr-cap">'+cap+'</span></div>'+
-    '<div class="cr-badges">'+mk('AA large 3:1', ratio>=3)+mk('AA 4.5:1', ratio>=4.5)+mk('AAA 7:1', ratio>=7)+'</div>';
+  const cap=(t.bg==='none')?'measured against the photo / background behind the text'
+           :(t.bg==='blur'?'measured against the blurred backdrop':'measured against the backdrop colour');
+  let verdict, vclass;
+  if(ratio>=7){ verdict='Excellent — crisp everywhere'; vclass='ok'; }
+  else if(ratio>=4.5){ verdict='Good — readable at any size'; vclass='ok'; }
+  else if(ratio>=3){ verdict='OK for large text only'; vclass='warn'; }
+  else { verdict='Too low — hard to read'; vclass='bad'; }
+  box.innerHTML=
+    '<div class="cr-head">Contrast checker</div>'+
+    '<div class="cr-top"><span class="cr-ratio">'+ratio.toFixed(2)+':1</span><span class="cr-verdict '+vclass+'">'+verdict+'</span></div>'+
+    '<div class="cr-badges">'+mk('AA large 3:1', ratio>=3)+mk('AA 4.5:1', ratio>=4.5)+mk('AAA 7:1', ratio>=7)+'</div>'+
+    '<div class="cr-note">How readable the text is on its background ('+cap+'). Higher is better — aim for <b>4.5:1</b> for normal text or <b>3:1</b> for large/bold headings (WCAG AA). AAA (7:1) is the strictest.</div>';
 }
 
 // ---- Style presets (saveable text looks) ----
@@ -1046,15 +1100,90 @@ function buildStyleList(){
     chip.onclick=e=>{ if(e.target.closest('.sc-del')){ e.stopPropagation(); deleteCustomStyle(p.name); return; } useStyle(p.style); };
     el.appendChild(chip);
   });
+  refreshStyleEditorSelect();
 }
-document.getElementById('saveStyle').onclick=()=>{
-  if(!sel || sel.type!=='text'){ alert('Select a text first, then save its look as a style.'); return; }
-  const name=prompt('Name this style (e.g. Heading, Quote, Caption):'); if(name==null) return;
-  const nm=name.trim(); if(!nm) return;
-  customStyles=customStyles.filter(s=>s.name!==nm);            // overwrite one with the same name
-  customStyles.push({name:nm, style:styleFromText(S().texts[sel.i])});
-  saveCustomStyles(); buildStyleList();
-};
+
+// ---- Style editor: build a style (font, colour, backdrop, blur, …) from scratch ----
+const DEFAULT_EDIT_STYLE={ font:(FONTS[0]||'Avenir Next'), size:90, color:'#ffffff', bold:false, align:'center', curve:0,
+  bg:'none', bgColor:'#000000', bgOpacity:1, blur:8, bgPad:24, bgPadY:16, bgRadius:24 };
+let editStyle=Object.assign({}, DEFAULT_EDIT_STYLE);
+let editingStyleName='';
+function populateSeFont(){
+  const fs=document.getElementById('seFont'); if(!fs) return; fs.innerHTML='';
+  allFonts().forEach(f=>{ const o=document.createElement('option'); o.value=f; o.textContent=f+(FONTS.includes(f)?'':' ✦'); o.style.fontFamily=f; fs.appendChild(o); });
+}
+function refreshStyleEditorSelect(){
+  const w=document.getElementById('seWhich'); if(!w) return;
+  w.innerHTML=''; const o0=document.createElement('option'); o0.value=''; o0.textContent='＋ New style'; w.appendChild(o0);
+  customStyles.forEach(s=>{ const o=document.createElement('option'); o.value=s.name; o.textContent=s.name; w.appendChild(o); });
+  w.value=editingStyleName||'';
+  const del=document.getElementById('seDelBtn'); if(del) del.style.display=editingStyleName?'':'none';
+}
+function updateStylePreview(){
+  const p=document.getElementById('sePreview'); if(!p) return; const sp=p.querySelector('span');
+  sp.style.fontFamily='"'+editStyle.font+'"'; sp.style.fontWeight=editStyle.bold?'700':'400';
+  sp.style.fontSize=Math.max(14,Math.min(44, editStyle.size*0.32))+'px';
+  sp.style.color=editStyle.color; sp.style.textAlign=editStyle.align;
+  sp.style.padding=(editStyle.bgPadY*0.32)+'px '+(editStyle.bgPad*0.32)+'px';
+  sp.style.borderRadius=(editStyle.bgRadius*0.4)+'px';
+  if(editStyle.bg==='solid'){ sp.style.background=hexA(editStyle.bgColor, editStyle.bgOpacity); sp.style.backdropFilter=sp.style.webkitBackdropFilter='none'; }
+  else if(editStyle.bg==='blur'){ sp.style.background=hexA(editStyle.bgColor, editStyle.bgOpacity); const b='blur('+(editStyle.blur*0.6)+'px)'; sp.style.backdropFilter=sp.style.webkitBackdropFilter=b; }
+  else { sp.style.background='transparent'; sp.style.backdropFilter=sp.style.webkitBackdropFilter='none'; }
+}
+function styleEditorFill(){                          // editStyle → controls
+  const g=id=>document.getElementById(id); if(!g('seFont')) return;
+  populateSeFont(); g('seFont').value=editStyle.font;
+  g('seName').value=editingStyleName;
+  g('seSize').value=editStyle.size; g('seColor').value=editStyle.color;
+  g('seBold').classList.toggle('on', !!editStyle.bold); g('seBold').setAttribute('aria-pressed', !!editStyle.bold);
+  [...g('seAlign').children].forEach(b=>b.classList.toggle('active', b.dataset.v===editStyle.align));
+  [...g('seBg').children].forEach(b=>b.classList.toggle('active', b.dataset.v===editStyle.bg));
+  g('seBlur').value=editStyle.blur; g('seBgColor').value=editStyle.bgColor; g('seBgOpacity').value=editStyle.bgOpacity;
+  g('seRadius').value=editStyle.bgRadius; g('sePad').value=editStyle.bgPad; g('sePadY').value=editStyle.bgPadY;
+  g('seBlurRow').style.display=(editStyle.bg==='blur')?'flex':'none';
+  g('seTintRow').style.display=(editStyle.bg!=='none')?'flex':'none';
+  updateStylePreview();
+  requestAnimationFrame(()=>document.querySelectorAll('#styleEditor input[type=range]').forEach(r=>{ const o=r.parentElement.querySelector('.val'); if(o)o.textContent=formatVal(r); setSliderFill(r); }));
+}
+(function initStyleEditor(){
+  const g=id=>document.getElementById(id); if(!g('styleEditor')) return;
+  g('seWhich').onchange=e=>{ const nm=e.target.value;
+    if(!nm){ editStyle=Object.assign({}, DEFAULT_EDIT_STYLE); editingStyleName=''; }
+    else { const f=customStyles.find(s=>s.name===nm); if(f){ editStyle=Object.assign({}, DEFAULT_EDIT_STYLE, f.style); editingStyleName=nm; } }
+    styleEditorFill(); refreshStyleEditorSelect();
+  };
+  g('seName').oninput=e=>{ editingStyleName=e.target.value; };
+  g('seFont').onchange=e=>{ editStyle.font=e.target.value; updateStylePreview(); };
+  g('seSize').oninput=e=>{ editStyle.size=+e.target.value; updateStylePreview(); };
+  g('seColor').oninput=e=>{ editStyle.color=e.target.value; updateStylePreview(); };
+  g('seBold').onclick=()=>{ editStyle.bold=!editStyle.bold; g('seBold').classList.toggle('on', editStyle.bold); g('seBold').setAttribute('aria-pressed', editStyle.bold); updateStylePreview(); };
+  g('seAlign').onclick=e=>{ const b=e.target.closest('button'); if(!b||!b.dataset.v)return; editStyle.align=b.dataset.v; [...g('seAlign').children].forEach(x=>x.classList.toggle('active', x.dataset.v===editStyle.align)); updateStylePreview(); };
+  g('seBg').onclick=e=>{ const b=e.target.closest('button'); if(!b||!b.dataset.v)return; editStyle.bg=b.dataset.v;
+    if(editStyle.bg==='solid') editStyle.bgOpacity=1; else if(editStyle.bg==='blur'){ editStyle.bgColor='#ffffff'; editStyle.blur=6; editStyle.bgOpacity=0.2; }
+    styleEditorFill(); };
+  g('seBlur').oninput=e=>{ editStyle.blur=+e.target.value; updateStylePreview(); };
+  g('seBgColor').oninput=e=>{ editStyle.bgColor=e.target.value; updateStylePreview(); };
+  g('seBgOpacity').oninput=e=>{ editStyle.bgOpacity=+e.target.value; updateStylePreview(); };
+  g('seRadius').oninput=e=>{ editStyle.bgRadius=+e.target.value; updateStylePreview(); };
+  g('sePad').oninput=e=>{ editStyle.bgPad=+e.target.value; updateStylePreview(); };
+  g('sePadY').oninput=e=>{ editStyle.bgPadY=+e.target.value; updateStylePreview(); };
+  g('seSaveBtn').onclick=()=>{
+    const nm=(g('seName').value||'').trim(); if(!nm){ alert('Give the style a name first (e.g. Heading, Quote).'); return; }
+    customStyles=customStyles.filter(s=>s.name!==nm);           // overwrite one with the same name
+    customStyles.push({name:nm, style:Object.assign({}, editStyle)});
+    editingStyleName=nm; saveCustomStyles(); buildStyleList();
+  };
+  g('seDelBtn').onclick=()=>{ if(!editingStyleName) return; if(!confirm('Delete the “'+editingStyleName+'” style?')) return;
+    customStyles=customStyles.filter(s=>s.name!==editingStyleName); editingStyleName=''; editStyle=Object.assign({}, DEFAULT_EDIT_STYLE);
+    saveCustomStyles(); buildStyleList(); styleEditorFill();
+  };
+  g('saveStyle').onclick=()=>{                                  // fill the editor from a selected text
+    if(!sel || sel.type!=='text'){ alert('Select a text on the canvas first — its look will fill these controls.'); return; }
+    editStyle=Object.assign({}, DEFAULT_EDIT_STYLE, styleFromText(S().texts[sel.i]));
+    styleEditorFill();
+  };
+  styleEditorFill();
+})();
 
 // ---- Selection panel (contextual) ----
 const selPanel=document.getElementById('selPanel');
