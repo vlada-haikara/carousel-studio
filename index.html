@@ -681,6 +681,7 @@ function roundRect(cx,x,y,w,h,r){
 // ---- Render ----
 let _base=null;
 let renderScale=1;                 // >1 only during high-resolution export (supersample)
+let _skipGlyphIdx=-1;              // when set, drawScene draws that text's backdrop but skips its glyphs (contrast measuring)
 const EXPORT_SCALE=2;              // export at 2× so zooming in isn't pixelated
 function getBase(){ if(!_base){_base=document.createElement('canvas');_base.width=W;_base.height=H;} return _base; }
 function hexA(hex,a){ const n=parseInt(hex.slice(1),16); return 'rgba('+((n>>16)&255)+','+((n>>8)&255)+','+(n&255)+','+a+')'; }
@@ -882,6 +883,8 @@ function drawScene(cx, showSel){
       cx.restore();
     }
 
+    if(_skipGlyphIdx===i){ cx.restore(); return; }   // contrast-measure mode: keep the backdrop, skip the glyphs
+
     if(t.icon) drawIcon(cx, t.icon, gx, vC, t.size, t.color);
 
     cx.fillStyle=t.color; cx.textBaseline='alphabetic'; cx.textAlign='left';
@@ -1047,6 +1050,27 @@ function sampleBaseRgb(cx0, cy0, rad){                 // average colour of the 
 function rawBgRgb(t){                                   // the photo / background directly behind the text
   return sampleBaseRgb(t.x*W, t.y*H + t.size*0.35, Math.max(30, t.size*0.7));
 }
+// Measure the REAL rendered backdrop under the text (background + blur + tint, as drawn),
+// by re-rendering the slide with this text's glyphs skipped and sampling where they'd sit.
+let _measCanvas=null;
+function avgRgb(cx2, cx0, cy0, rad, W2, H2){
+  const x=Math.max(0,Math.min(W2-1,Math.round(cx0-rad))), y=Math.max(0,Math.min(H2-1,Math.round(cy0-rad)));
+  const w=Math.max(1,Math.min(W2-x,Math.round(rad*2))), h=Math.max(1,Math.min(H2-y,Math.round(rad*2)));
+  let d; try{ d=cx2.getImageData(x,y,w,h).data; }catch(e){ return null; }
+  let r=0,g=0,b=0,n=0; for(let i=0;i<d.length;i+=4){ r+=d[i]; g+=d[i+1]; b+=d[i+2]; n++; }
+  return n?[r/n,g/n,b/n]:null;
+}
+function measBackdropRgb(t, idx){
+  const MS=0.4;                                   // measure at reduced resolution — cheap, plenty for an average
+  const mw=Math.round(W*MS), mh=Math.round(H*MS);
+  if(!_measCanvas) _measCanvas=document.createElement('canvas');
+  if(_measCanvas.width!==mw||_measCanvas.height!==mh){ _measCanvas.width=mw; _measCanvas.height=mh; }
+  const mc=_measCanvas.getContext('2d');
+  mc.setTransform(MS,0,0,MS,0,0); mc.clearRect(0,0,W,H);
+  _skipGlyphIdx=idx;
+  try{ drawScene(mc, false); } catch(e){} finally { _skipGlyphIdx=-1; render(); }
+  return avgRgb(mc, (t.x*W)*MS, (t.y*H + t.size*0.35)*MS, Math.max(10, t.size*0.55*MS), mw, mh);
+}
 function effBgRgb(t, raw){                              // background seen THROUGH the blur/solid backdrop
   if(t.bg==='solid' || t.bg==='blur'){
     const tint=hexToRgb(t.bgColor||'#000000');
@@ -1060,8 +1084,10 @@ function updateContrast(t){
   const box=document.getElementById('contrastBox'); if(!box||!t) return;
   const txt=hexToRgb(t.color);
   const raw=rawBgRgb(t);                          // the photo/background behind
-  const eff=effBgRgb(t, raw);                     // that background seen through the backdrop
-  const ratio=contrastRatio(txt, eff);           // what the eye actually sees
+  const idx=S().texts.indexOf(t);
+  const measured=(idx>=0)?measBackdropRgb(t, idx):null;   // the REAL rendered backdrop (bg + blur + tint)
+  const eff=measured || effBgRgb(t, raw);        // what the eye actually sees
+  const ratio=contrastRatio(txt, eff);
   const rawRatio=contrastRatio(txt, raw);
   const mk=(label,pass)=>'<span class="cr-b '+(pass?'pass':'fail')+'">'+label+' '+(pass?'✓':'✗')+'</span>';
   const opaque = t.bg==='solid' && (t.bgOpacity==null || t.bgOpacity>=0.99);
