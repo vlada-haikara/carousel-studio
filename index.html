@@ -249,6 +249,26 @@
   .contrast .cr-b{font-size:11px; font-weight:800; padding:4px 8px; border-radius:8px; letter-spacing:.02em;}
   .contrast .cr-b.pass{color:#0f3d2a; background:#7ee2b8; border:1px solid transparent;}
   .contrast .cr-b.fail{color:var(--danger); background:var(--danger-fill); border:1px solid var(--danger-border);}
+  /* Projects library modal */
+  .modal{position:fixed; inset:0; z-index:100; display:none; align-items:center; justify-content:center;
+    background:rgba(0,0,0,.5); -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px); padding:16px;}
+  .modal.open{display:flex;}
+  .modal-panel{width:min(880px,100%); max-height:90vh; display:flex; flex-direction:column;
+    background:var(--glass-fill-strong); border:1px solid var(--glass-border); border-radius:22px;
+    -webkit-backdrop-filter:blur(var(--blur-panel)); backdrop-filter:blur(var(--blur-panel));
+    box-shadow:var(--shadow-glass-lg), var(--glass-highlight); overflow:hidden;}
+  .modal-head{display:flex; align-items:center; justify-content:space-between; padding:16px 18px; border-bottom:1px solid var(--glass-border);}
+  .modal-title{font-size:17px; font-weight:800;}
+  .modal-actions{padding:14px 18px 2px;}
+  .proj-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:14px; padding:16px 18px 22px; overflow-y:auto;}
+  .proj-card{background:var(--glass-fill-weak); border:1px solid var(--glass-border); border-radius:16px; overflow:hidden; display:flex; flex-direction:column;}
+  .proj-card .pc-thumb{width:100%; aspect-ratio:4/5; background:#000; object-fit:contain; display:block; cursor:pointer;}
+  .proj-card .pc-meta{padding:9px 11px 6px; cursor:pointer;}
+  .proj-card .pc-name{font-size:13px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .proj-card .pc-date{font-size:11px; color:var(--txt-faint); margin-top:2px;}
+  .proj-card .pc-actions{display:flex; gap:6px; padding:0 9px 10px; margin-top:auto;}
+  .proj-card .pc-actions .btn{flex:1; padding:8px 6px; font-size:12px; min-height:40px;}
+  .proj-empty{grid-column:1/-1; text-align:center; color:var(--muted); font-size:14px; line-height:1.5; padding:34px 10px;}
   .hint{font-size:12px; color:var(--muted); line-height:1.5; margin-top:2px;}
   /* Selected panel — a translucent glass card on the sheet (the sheet supplies the blur) */
   .selbar{
@@ -304,6 +324,7 @@
   <h1>Carousel Studio</h1>
   <span class="spacer"></span>
   <div class="topbar-actions">
+    <button class="btn sm ghost" id="projectsBtn">Projects</button>
     <button class="btn sm ghost" id="saveProj">Save</button>
     <button class="btn sm ghost" id="openProj">Open</button>
     <button class="btn sm ghost" id="helpBtn">Help</button>
@@ -448,6 +469,19 @@
 <input type="file" id="projInput" accept=".json,application/json" style="display:none">
 <input type="file" id="overlayInput" accept="image/*" style="display:none">
 <div id="textEditor" contenteditable="true" spellcheck="false"></div>
+
+<div id="projModal" class="modal" aria-hidden="true">
+  <div class="modal-panel">
+    <div class="modal-head">
+      <span class="modal-title">Your projects</span>
+      <button class="btn sm ghost" id="projClose">Close</button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn sm primary" id="projSaveCurrent" style="width:100%;">Save current project to app</button>
+    </div>
+    <div class="proj-grid" id="projGrid"></div>
+  </div>
+</div>
 
 <script>
 "use strict";
@@ -1794,9 +1828,75 @@ document.getElementById('openProj').onclick=()=>projInput.click();
 projInput.onchange=e=>{
   const f=e.target.files[0]; if(!f)return;
   const rd=new FileReader();
-  rd.onload=()=>{ try{ loadProject(JSON.parse(rd.result)); }catch(err){ alert('Could not open that project file.'); } };
+  rd.onload=()=>{ try{ loadProject(JSON.parse(rd.result)); currentProjectId=null; currentProjectName=''; }catch(err){ alert('Could not open that project file.'); } };
   rd.readAsText(f); projInput.value='';
 };
+
+// ---- In-app project library (stored on this device via IndexedDB) ----
+let currentProjectId=null, currentProjectName='';
+const DB_NAME='carousel-studio', DB_STORE='projects';
+let _db=null;
+function idb(){ return new Promise((res,rej)=>{
+  if(_db) return res(_db);
+  const r=indexedDB.open(DB_NAME,1);
+  r.onupgradeneeded=()=>{ const db=r.result; if(!db.objectStoreNames.contains(DB_STORE)) db.createObjectStore(DB_STORE,{keyPath:'id'}); };
+  r.onsuccess=()=>{ _db=r.result; res(_db); };
+  r.onerror=()=>rej(r.error);
+}); }
+function idbAll(){ return idb().then(db=>new Promise((res,rej)=>{ const rq=db.transaction(DB_STORE,'readonly').objectStore(DB_STORE).getAll(); rq.onsuccess=()=>res(rq.result||[]); rq.onerror=()=>rej(rq.error); })); }
+function idbPut(rec){ return idb().then(db=>new Promise((res,rej)=>{ const tx=db.transaction(DB_STORE,'readwrite'); tx.objectStore(DB_STORE).put(rec); tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error); })); }
+function idbDel(id){ return idb().then(db=>new Promise((res,rej)=>{ const tx=db.transaction(DB_STORE,'readwrite'); tx.objectStore(DB_STORE).delete(id); tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error); })); }
+function genId(){ try{ return crypto.randomUUID(); }catch(e){ return 'p'+Date.now()+Math.random().toString(36).slice(2); } }
+function projectThumb(){
+  const tw=220, th=Math.round(tw*H/W);
+  const cv=document.createElement('canvas'); cv.width=tw; cv.height=th;
+  const c=cv.getContext('2d'); c.imageSmoothingEnabled=true; c.imageSmoothingQuality='high';
+  const old=cur; cur=0; c.save(); c.scale(tw/W, th/H); drawScene(c,false); c.restore(); cur=old;
+  render();                                    // restore the base layer to the live slide
+  return cv.toDataURL('image/jpeg', 0.72);
+}
+const projModal=document.getElementById('projModal');
+function openProjModal(){ projModal.classList.add('open'); buildProjectGrid(); }
+function closeProjModal(){ projModal.classList.remove('open'); }
+function openProjectRecord(rec){
+  try{ loadProject(rec.data); currentProjectId=rec.id; currentProjectName=rec.name||''; closeProjModal(); }
+  catch(e){ alert('Could not open that project.'); }
+}
+async function saveCurrentToApp(){
+  const name=prompt('Project name:', currentProjectName||'Untitled'); if(name==null) return;
+  const nm=name.trim()||'Untitled';
+  const rec={ id: currentProjectId||genId(), name:nm, updated:Date.now(), thumb:projectThumb(), data:serialize() };
+  try{ await idbPut(rec); currentProjectId=rec.id; currentProjectName=nm; buildProjectGrid(); }
+  catch(e){ alert('Could not save — device storage may be full. Try deleting an old project, or use file Save as a backup.'); }
+}
+async function buildProjectGrid(){
+  const grid=document.getElementById('projGrid'); if(!grid) return;
+  grid.innerHTML='<div class="proj-empty">Loading…</div>';
+  let list=[];
+  try{ list=await idbAll(); }catch(e){ grid.innerHTML='<div class="proj-empty">Could not open project storage on this device.</div>'; return; }
+  list.sort((a,b)=>(b.updated||0)-(a.updated||0));
+  if(!list.length){ grid.innerHTML='<div class="proj-empty">No saved projects yet.<br>Tap “Save current project to app” to add this one.</div>'; return; }
+  grid.innerHTML='';
+  list.forEach(rec=>{
+    const card=document.createElement('div'); card.className='proj-card';
+    card.innerHTML='<img class="pc-thumb" alt=""><div class="pc-meta"><div class="pc-name"></div><div class="pc-date"></div></div>'+
+      '<div class="pc-actions"><button class="btn sm ghost pc-open">Open</button><button class="btn sm ghost pc-ren">Rename</button><button class="btn sm ghost danger pc-del">Delete</button></div>';
+    if(rec.thumb) card.querySelector('.pc-thumb').src=rec.thumb;
+    card.querySelector('.pc-name').textContent=(rec.name||'Untitled')+(currentProjectId===rec.id?' • open':'');
+    card.querySelector('.pc-date').textContent=rec.updated? new Date(rec.updated).toLocaleString():'';
+    const open=()=>openProjectRecord(rec);
+    card.querySelector('.pc-thumb').onclick=open;
+    card.querySelector('.pc-meta').onclick=open;
+    card.querySelector('.pc-open').onclick=open;
+    card.querySelector('.pc-ren').onclick=async()=>{ const n=prompt('Rename project:', rec.name||''); if(n==null) return; const nm=n.trim(); if(!nm) return; rec.name=nm; try{ await idbPut(rec); }catch(e){} if(currentProjectId===rec.id) currentProjectName=nm; buildProjectGrid(); };
+    card.querySelector('.pc-del').onclick=async()=>{ if(!confirm('Delete “'+(rec.name||'Untitled')+'”? This removes the in-app copy on this device (your file backups are untouched).')) return; try{ await idbDel(rec.id); }catch(e){} if(currentProjectId===rec.id) currentProjectId=null; buildProjectGrid(); };
+    grid.appendChild(card);
+  });
+}
+document.getElementById('projectsBtn').onclick=openProjModal;
+document.getElementById('projClose').onclick=closeProjModal;
+document.getElementById('projSaveCurrent').onclick=saveCurrentToApp;
+projModal.addEventListener('click', e=>{ if(e.target===projModal) closeProjModal(); });
 
 // ---- Live numeric readouts next to sliders ----
 function formatVal(r){ const u=r.dataset.unit, v=+r.value;
