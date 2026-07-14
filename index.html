@@ -767,8 +767,8 @@ function drawScene(cx, showSel){
     const vC = (inkTop+inkBot)/2;
 
     if(t.bg && t.bg!=='none'){
-      const pad=(t.bgPad==null?22:t.bgPad);
-      const px=gx-pad, py=inkTop-pad, pw=groupW+pad*2, ph=inkH+pad*2;
+      const padX=(t.bgPad==null?22:t.bgPad), padY=(t.bgPadY==null?padX:t.bgPadY);
+      const px=gx-padX, py=inkTop-padY, pw=groupW+padX*2, ph=inkH+padY*2;
       cx.save(); roundRect(cx,px,py,pw,ph,(t.bgRadius==null?18:t.bgRadius)); cx.clip();
       if(t.bg==='blur') drawFrost(cx, base, t.blur||10);
       if(t.bgOpacity>0){ cx.fillStyle=hexA(t.bgColor||'#000000', t.bgOpacity); cx.fillRect(px-2,py-2,pw+4,ph+4); }
@@ -1038,7 +1038,8 @@ function syncPanel(){
         <button class="btn sm ghost" id="tMoreBtn" style="width:100%; margin:8px 0;">${textMoreOpen?'Less settings ▴':'More settings ▾'}</button>
         <div id="tMore" style="display:${textMoreOpen?'block':'none'}">
           <div class="row"><span class="lab">Curve</span><input type="range" id="tCurve" min="-180" max="180" value="${t.curve||0}"><button class="btn sm ghost" id="tCurveReset" title="Straighten (set to 0)">Straighten</button><span class="val"></span></div>
-          <div class="row"><span class="lab">Padding</span><input type="range" id="tBgPad" min="0" max="70" value="${t.bgPad}"><span class="val"></span></div>
+          <div class="row"><span class="lab">Padding ↔</span><input type="range" id="tBgPad" min="0" max="70" value="${t.bgPad}"><span class="val"></span></div>
+          <div class="row"><span class="lab">Padding ↕</span><input type="range" id="tBgPadY" min="0" max="70" value="${t.bgPadY==null?t.bgPad:t.bgPadY}"><span class="val"></span></div>
           <div class="row"><span class="lab">Bg corners</span><input type="range" id="tBgRadius" min="0" max="90" value="${t.bgRadius}"><span class="val"></span></div>
           ${t.bg!=='none'?'<button class="btn sm" id="tSwap" style="width:100%; margin-bottom:8px;">Swap text ⇄ backdrop colours</button>':''}
         </div>
@@ -1087,6 +1088,7 @@ function syncPanel(){
     document.getElementById('tBgColor').oninput=e=>{t.bgColor=e.target.value; render();};
     document.getElementById('tBgOpacity').oninput=e=>{t.bgOpacity=+e.target.value; render();};
     document.getElementById('tBgPad').oninput=e=>{t.bgPad=+e.target.value; render();};
+    document.getElementById('tBgPadY').oninput=e=>{t.bgPadY=+e.target.value; render();};
     document.getElementById('tBgRadius').oninput=e=>{t.bgRadius=+e.target.value; render();};
     document.getElementById('tRot').oninput=e=>{
       let v=+e.target.value; if(Math.abs(v)<4){ v=0; e.target.value=0; }   // snap to upright near centre
@@ -1149,14 +1151,27 @@ function hitTest(p){
       if(q.x>=b.x-12&&q.x<=b.x+b.w+12&&q.y>=b.y-12&&q.y<=b.y+b.h+12) return {type:'text',i};
       continue;
     }
+    // Match the DRAWN box (glyph ink + backdrop padding) so tapping the pill — not just the
+    // letters — reliably selects the text instead of falling through to the photo behind it.
     ctx.font=(t.bold?'700 ':'')+t.size+'px "'+t.font+'"';
     const lines=t.text.split('\n'); let wmax=0;
-    lines.forEach(ln=>{wmax=Math.max(wmax,ctx.measureText(ln||' ').width);});
-    const gw=wmax + (t.icon?t.size*0.75:0);
-    let bx=t.x*W; if(t.align==='center')bx-=gw/2; if(t.align==='right')bx-=gw;
-    const by=t.y*H, bh=lines.length*t.size*1.15;
-    const q=unrotatePt(p, bx+gw/2, by+bh/2, t.rot);     // same pivot the draw uses
-    if(q.x>=bx-12&&q.x<=bx+gw+12&&q.y>=by-12&&q.y<=by+bh+12) return {type:'text',i};
+    lines.forEach(ln=>{ const m=ctx.measureText(ln||' '); const iw=(m.actualBoundingBoxLeft||0)+((m.actualBoundingBoxRight!=null)?m.actualBoundingBoxRight:m.width); wmax=Math.max(wmax, iw); });
+    const lineH=t.size*1.15, topY=t.y*H, x=t.x*W;
+    const m0=ctx.measureText(lines[0]||'X'), mL=ctx.measureText(lines[lines.length-1]||'X');
+    const asc=(m0.fontBoundingBoxAscent!=null)?m0.fontBoundingBoxAscent:t.size*0.82;
+    const aA =(m0.actualBoundingBoxAscent!=null)?m0.actualBoundingBoxAscent:t.size*0.75;
+    const aD =(mL.actualBoundingBoxDescent!=null)?mL.actualBoundingBoxDescent:t.size*0.20;
+    const base0=topY+asc, baseL=topY+asc+(lines.length-1)*lineH;
+    const refAsc=ctx.measureText('Hbdfhkl').actualBoundingBoxAscent||t.size*0.72;
+    const refDesc=ctx.measureText('gjpqy').actualBoundingBoxDescent||t.size*0.2;
+    const inkTop=base0-Math.min(aA,refAsc*1.03), inkBot=baseL+Math.min(aD,refDesc*1.08), inkH=inkBot-inkTop;
+    const iconW=t.icon?t.size*0.75:0, gw=wmax+iconW;
+    let gx=x; if(t.align==='center')gx=x-gw/2; if(t.align==='right')gx=x-gw;
+    const hasBg=t.bg&&t.bg!=='none', basePad=(t.bgPad==null?22:t.bgPad);
+    const padX=hasBg?basePad:10, padY=hasBg?(t.bgPadY==null?basePad:t.bgPadY):8;
+    const bx=gx-padX-2, by=inkTop-padY-2, bw=gw+padX*2+4, bh=inkH+padY*2+4;
+    const q=unrotatePt(p, gx+gw/2, topY+lines.length*lineH/2, t.rot);   // same pivot the draw uses
+    if(q.x>=bx&&q.x<=bx+bw&&q.y>=by&&q.y<=by+bh) return {type:'text',i};
   }
   const cells=LAYOUTS[s.layout].cells;
   for(let i=0;i<cells.length;i++){
@@ -1196,7 +1211,7 @@ function positionEditor(t){
   editor.style.lineHeight='1.15';
   editor.style.color=t.color;
   editor.style.textAlign=t.align;
-  editor.style.padding=(hasBg? t.bgPad*sy : 0)+'px';
+  editor.style.padding=(hasBg? ((t.bgPadY==null?t.bgPad:t.bgPadY)*sy) : 0)+'px '+(hasBg? (t.bgPad*sx) : 0)+'px';
   editor.style.borderRadius=((t.bgRadius||0)*sy)+'px';
   if(t.bg==='solid'){
     editor.style.background=hexA(t.bgColor||'#000000', t.bgOpacity);
@@ -1263,7 +1278,7 @@ function updateTextRotSlider(){
 canvas.addEventListener('pointerdown',e=>{
   if(recording) return;                                                 // ignore taps while exporting a video
   if(editing!==null) commitEdit();
-  if(isMobile() && sheetName && sheetName!=='selected') closeSheet();   // working on canvas dismisses a tool sheet
+  if(isMobile() && sheetName && sheetName!=='selected' && performance.now()-sheetJustOpened>350) closeSheet();   // working on canvas dismisses a tool sheet (but not the tap that just opened it)
   const p=toCanvas(e);
   pointers.set(e.pointerId,{x:p.x,y:p.y});
   try{ canvas.setPointerCapture(e.pointerId); }catch(err){}
@@ -1446,15 +1461,17 @@ document.getElementById('addText').onclick=()=>{ addTextObj(); startEdit(S().tex
 
 // Instagram-style sticker presets (a pill = solid backdrop + rounded corners)
 const STICKERS={
-  location:{text:'Add place', icon:'pin', size:46, color:'#ffffff', bold:false, bg:'solid', bgColor:'#000000', bgOpacity:1, bgPad:26, bgRadius:90, y:.9},
-  caption :{text:'Your caption', size:58, color:'#1a1a1a', bold:false, bg:'solid', bgColor:'#ffffff', bgOpacity:1, bgPad:28, bgRadius:28, y:.5},
-  mention :{text:'@username',    size:46, color:'#ffffff', bold:false, bg:'solid', bgColor:'#000000', bgOpacity:1, bgPad:24, bgRadius:90, y:.85},
-  hashtag :{text:'#hashtag',     size:46, color:'#ffffff', bold:false, bg:'solid', bgColor:'#000000', bgOpacity:1, bgPad:24, bgRadius:90, y:.8}
+  location:{text:'Add place', icon:'pin', size:46, color:'#ffffff', bold:false, bg:'solid', bgColor:'#000000', bgOpacity:1, bgPad:26, bgPadY:14, bgRadius:90, y:.9},
+  caption :{text:'Your caption', size:58, color:'#1a1a1a', bold:false, bg:'solid', bgColor:'#ffffff', bgOpacity:1, bgPad:28, bgPadY:20, bgRadius:28, y:.5},
+  mention :{text:'@username',    size:46, color:'#ffffff', bold:false, bg:'solid', bgColor:'#000000', bgOpacity:1, bgPad:24, bgPadY:13, bgRadius:90, y:.85},
+  hashtag :{text:'#hashtag',     size:46, color:'#ffffff', bold:false, bg:'solid', bgColor:'#000000', bgOpacity:1, bgPad:24, bgPadY:13, bgRadius:90, y:.8}
 };
-document.getElementById('stLoc').onclick    =()=>addTextObj(STICKERS.location);
-document.getElementById('stCap').onclick    =()=>addTextObj(STICKERS.caption);
-document.getElementById('stMention').onclick=()=>addTextObj(STICKERS.mention);
-document.getElementById('stTag').onclick    =()=>addTextObj(STICKERS.hashtag);
+// add a sticker, then drop straight into typing on an empty field (same as Add text)
+function addSticker(preset){ addTextObj(preset); startEdit(S().texts.length-1); }
+document.getElementById('stLoc').onclick    =()=>addSticker(STICKERS.location);
+document.getElementById('stCap').onclick    =()=>addSticker(STICKERS.caption);
+document.getElementById('stMention').onclick=()=>addSticker(STICKERS.mention);
+document.getElementById('stTag').onclick    =()=>addSticker(STICKERS.hashtag);
 
 // ---- Overlay images (transparent PNGs / cut-outs on top) ----
 const overlayInput=document.getElementById('overlayInput');
@@ -1737,6 +1754,7 @@ document.querySelectorAll('#toolTabs button').forEach(b=> b.onclick=()=>showTab(
 const MQ=matchMedia('(max-width:860px)');
 function isMobile(){ return MQ.matches; }
 let sheetName=null, lastSelKey='', sheetExpanded=false;
+let sheetJustOpened=0, lastToolTap=0;      // guards against a sheet opening then instantly closing
 const TOOL_TITLES={slides:'Slides', layout:'Layout', photos:'Photos', text:'Text', stickers:'Stickers', bg:'Background', layers:'Layers', format:'Canvas format', selected:'Edit selected'};
 const TAB_TOOLS=['layout','photos','text','stickers','bg'];
 function sectionEl(name){
@@ -1772,6 +1790,7 @@ function openSheet(name){
   document.getElementById('sheetTitle').textContent=TOOL_TITLES[name]||'Edit';
   const p=document.querySelector('.panel'); p.classList.add('open'); p.scrollTop=0;
   document.querySelectorAll('#mtoolbar button').forEach(b=>b.classList.toggle('active', b.dataset.tool===name));
+  sheetJustOpened=performance.now();
   requestAnimationFrame(fitCanvasToSheet);
 }
 function closeSheet(){
@@ -1792,7 +1811,12 @@ function applyMode(){
   requestAnimationFrame(fitCanvasToSheet);
 }
 document.querySelectorAll('#mtoolbar button').forEach(b=>{
-  b.onclick=()=>{ if(sheetName===b.dataset.tool) closeSheet(); else openSheet(b.dataset.tool); };
+  b.onclick=()=>{
+    const now=performance.now();
+    if(now-lastToolTap<200) return;           // swallow an accidental double-fire on the same tap
+    lastToolTap=now;
+    if(sheetName===b.dataset.tool) closeSheet(); else openSheet(b.dataset.tool);
+  };
 });
 document.getElementById('sheetClose').onclick=closeSheet;
 // Drag the grab-handle: pull UP to expand the sheet, pull DOWN to collapse it,
