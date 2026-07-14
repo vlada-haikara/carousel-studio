@@ -261,6 +261,15 @@
   .contrast .cr-b{font-size:11px; font-weight:800; padding:4px 8px; border-radius:8px; letter-spacing:.02em;}
   .contrast .cr-b.pass{color:#0f3d2a; background:#7ee2b8; border:1px solid transparent;}
   .contrast .cr-b.fail{color:var(--danger); background:var(--danger-fill); border:1px solid var(--danger-border);}
+  /* readability meter */
+  .contrast .cr-meter{position:relative; flex:1 1 60px; min-width:60px; height:8px; border-radius:5px;
+    background:var(--glass-fill-weak); border:1px solid var(--glass-border); overflow:hidden;}
+  .contrast .cr-fill{position:absolute; left:0; top:0; bottom:0; border-radius:5px; transition:width .2s ease;}
+  .contrast .cr-fill.ok{background:#3cbe8a;}
+  .contrast .cr-fill.warn{background:#f5d675;}
+  .contrast .cr-fill.bad{background:#e77b7b;}
+  .contrast .cr-score{font-size:13px; font-weight:800; font-variant-numeric:tabular-nums; color:var(--txt); min-width:26px; text-align:right;}
+  .contrast .cr-tech{color:var(--txt-faint);}
   /* Projects library modal */
   .modal{position:fixed; inset:0; z-index:100; display:none; align-items:center; justify-content:center;
     background:rgba(0,0,0,.5); -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px); padding:16px;}
@@ -1080,33 +1089,72 @@ function effBgRgb(t, raw){                              // background seen THROU
   }
   return raw;
 }
-function updateContrast(t){
+function measBackdropStats(t, idx, Lt){
+  // Re-render the slide with THIS text's glyphs skipped, sample where the text sits, and
+  // return readability stats: the worst (hardest) spot under the text + how busy the bg is.
+  const MS=0.4, mw=Math.round(W*MS), mh=Math.round(H*MS);
+  if(!_measCanvas) _measCanvas=document.createElement('canvas');
+  if(_measCanvas.width!==mw||_measCanvas.height!==mh){ _measCanvas.width=mw; _measCanvas.height=mh; }
+  const mc=_measCanvas.getContext('2d');
+  mc.setTransform(MS,0,0,MS,0,0); mc.clearRect(0,0,W,H);
+  _skipGlyphIdx=idx;
+  try{ drawScene(mc,false); }catch(e){} finally{ _skipGlyphIdx=-1; render(); }
+  const cx0=(t.x*W)*MS, cy0=(t.y*H + t.size*0.35)*MS, rad=Math.max(10, t.size*0.55*MS);
+  const x=Math.max(0,Math.min(mw-1,Math.round(cx0-rad))), y=Math.max(0,Math.min(mh-1,Math.round(cy0-rad)));
+  const w=Math.max(1,Math.min(mw-x,Math.round(rad*2))), h=Math.max(1,Math.min(mh-y,Math.round(rad*2)));
+  let d; try{ d=mc.getImageData(x,y,w,h).data; }catch(e){ return null; }
+  const cs=[]; let sumL=0,sumL2=0,n=0;
+  for(let i=0;i<d.length;i+=4){
+    const Lb=relLum([d[i],d[i+1],d[i+2]]);
+    cs.push((Math.max(Lt,Lb)+0.05)/(Math.min(Lt,Lb)+0.05));
+    sumL+=Lb; sumL2+=Lb*Lb; n++;
+  }
+  if(!n) return null;
+  cs.sort((a,b)=>a-b);
+  const q=p=>cs[Math.min(cs.length-1,Math.max(0,Math.floor(p*(cs.length-1))))];
+  const meanL=sumL/n, sd=Math.sqrt(Math.max(0, sumL2/n-meanL*meanL));
+  return { worst:q(0.10), sd:sd };                       // 10th-percentile-worst spot; luminance spread = busyness
+}
+function updateContrast(t){                              // plain-language READABILITY score (our own model)
   const box=document.getElementById('contrastBox'); if(!box||!t) return;
-  const txt=hexToRgb(t.color);
-  const raw=rawBgRgb(t);                          // the photo/background behind
+  const Lt=relLum(hexToRgb(t.color));
   const idx=S().texts.indexOf(t);
-  const measured=(idx>=0)?measBackdropRgb(t, idx):null;   // the REAL rendered backdrop (bg + blur + tint)
-  const eff=measured || effBgRgb(t, raw);        // what the eye actually sees
-  const ratio=contrastRatio(txt, eff);
-  const rawRatio=contrastRatio(txt, raw);
-  const mk=(label,pass)=>'<span class="cr-b '+(pass?'pass':'fail')+'">'+label+' '+(pass?'✓':'✗')+'</span>';
-  const opaque = t.bg==='solid' && (t.bgOpacity==null || t.bgOpacity>=0.99);
-  const hasBackdrop = (t.bg==='solid'||t.bg==='blur') && !opaque;   // translucent backdrop → background still shows through
+  const st=(idx>=0)?measBackdropStats(t, idx, Lt):null;
+  if(!st){ box.innerHTML=''; return; }
+  const worst=st.worst;
+  const large = t.size>=60 || (t.bold && t.size>=47);    // big / bold text is more forgiving
+  const target = large ? 3.0 : 4.5;                      // comfortable worst-spot contrast for this size/weight
+  const good = target + 2.5;
+  const score = Math.round(Math.max(0,Math.min(1,(worst-1)/(good-1)))*100);
   let verdict, vclass;
-  if(ratio>=7){ verdict='Excellent — crisp everywhere'; vclass='ok'; }
-  else if(ratio>=4.5){ verdict='Good — readable at any size'; vclass='ok'; }
-  else if(ratio>=3){ verdict='OK for large text only'; vclass='warn'; }
-  else { verdict='Too low — hard to read'; vclass='bad'; }
-  const cap = (t.bg==='none') ? 'Checked against the photo / background behind the text.'
-            : opaque ? 'Checked against the solid backdrop.'
-            : (t.bg==='blur' ? 'Checked against the background seen through the blur backdrop.'
-                             : 'Checked against the background seen through the tinted backdrop.');
-  const both = hasBackdrop ? ' Against the photo alone (if the backdrop were removed) it’s <b>'+rawRatio.toFixed(2)+':1</b>.' : '';
+  if(worst>=good){ verdict='Easy to read'; vclass='ok'; }
+  else if(worst>=target){ verdict='Clear'; vclass='ok'; }
+  else if(worst>=target*0.72){ verdict='Could be clearer'; vclass='warn'; }
+  else { verdict='Hard to read'; vclass='bad'; }
+  const backdrop=(t.bg==='blur'||t.bg==='solid');
+  const opaque = t.bg==='solid' && (t.bgOpacity==null||t.bgOpacity>=0.99);
+  const lightText = Lt>0.5, busy = st.sd>0.06;
+  let tip;
+  if(worst>=target){
+    tip = (busy && !backdrop) ? 'Holds up even over the busy photo.' : 'Stays clear across the whole text.';
+  } else if(!backdrop){
+    tip = 'The photo shows through and the hardest spot goes faint. Add a <b>Blur</b> or <b>Solid</b> backdrop to even it out.';
+  } else if(!opaque){
+    const tintL=relLum(hexToRgb(t.bgColor||'#000000'));
+    const wrongDir = (lightText && tintL>0.5) || (!lightText && tintL<0.5);
+    tip = wrongDir
+      ? (lightText ? 'The light backdrop lightens the area under your light text — pick a <b>darker</b> backdrop colour, or raise its strength.'
+                   : 'The dark backdrop darkens the area under your dark text — pick a <b>lighter</b> backdrop colour, or raise its strength.')
+      : 'Raise the backdrop <b>strength</b>, or use <b>Solid</b>, so less of the photo shows through.';
+  } else {
+    tip = lightText ? 'Try a darker text colour.' : 'Try a lighter text colour.';
+  }
   box.innerHTML=
-    '<div class="cr-head">Contrast checker</div>'+
-    '<div class="cr-top"><span class="cr-ratio">'+ratio.toFixed(2)+':1</span><span class="cr-verdict '+vclass+'">'+verdict+'</span></div>'+
-    '<div class="cr-badges">'+mk('AA large 3:1', ratio>=3)+mk('AA 4.5:1', ratio>=4.5)+mk('AAA 7:1', ratio>=7)+'</div>'+
-    '<div class="cr-note">'+cap+both+' Higher is better — aim for <b>4.5:1</b> for normal text or <b>3:1</b> for large/bold headings (WCAG AA).</div>';
+    '<div class="cr-head">Readability</div>'+
+    '<div class="cr-top"><span class="cr-verdict '+vclass+'">'+verdict+'</span>'+
+      '<span class="cr-meter"><span class="cr-fill '+vclass+'" style="width:'+score+'%"></span></span>'+
+      '<span class="cr-score">'+score+'</span></div>'+
+    '<div class="cr-note">'+tip+' <span class="cr-tech">Hardest spot ≈ '+worst.toFixed(1)+':1'+(large?', large/bold text':'')+'.</span></div>';
 }
 
 // ---- Style presets (saveable text looks) ----
