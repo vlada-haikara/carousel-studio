@@ -237,6 +237,7 @@
     background:var(--glass-fill-weak); border:1px solid var(--glass-border); border-radius:12px;
     padding:11px 13px; color:var(--txt); font-family:inherit; font-size:15px; font-weight:600; cursor:pointer;}
   .style-chip:active{transform:scale(.97);}
+  .style-chip.active{border-color:var(--accent-border); background:var(--accent-fill); color:var(--on-accent-fill); box-shadow:var(--glow-accent);}
   .style-chip .sc-del{display:inline-grid; place-items:center; width:20px; height:20px; border-radius:50%;
     background:var(--danger-fill); color:var(--danger); border:1px solid var(--danger-border); font-size:14px; line-height:1;}
   /* Style editor live preview (over a busy backdrop so blur/opacity read) */
@@ -394,7 +395,7 @@
     <div class="group" id="grpStyle">
       <label class="title">Style presets</label>
       <div class="style-list" id="styleList"></div>
-      <p class="hint">Tap a style to restyle the selected text, or to start new text in that look.</p>
+      <p class="hint">Tap a style to load it into the editor below. With a text selected on the canvas, tapping a style applies it to that text.</p>
 
       <div class="subhd">Create / edit a style</div>
       <div class="selbar" id="styleEditor">
@@ -1043,31 +1044,43 @@ function sampleBaseRgb(cx0, cy0, rad){                 // average colour of the 
   let r=0,g=0,bl=0,n=0; for(let i=0;i<d.length;i+=4){ r+=d[i]; g+=d[i+1]; bl+=d[i+2]; n++; }
   return n? [r/n,g/n,bl/n] : [128,128,128];
 }
-function textBgRgb(t){                                  // effective colour directly under the text
-  let bg=sampleBaseRgb(t.x*W, t.y*H + t.size*0.3, Math.max(20, t.size));
+function rawBgRgb(t){                                   // the photo / background directly behind the text
+  return sampleBaseRgb(t.x*W, t.y*H + t.size*0.35, Math.max(30, t.size*0.7));
+}
+function effBgRgb(t, raw){                              // background seen THROUGH the blur/solid backdrop
   if(t.bg==='solid' || t.bg==='blur'){
     const tint=hexToRgb(t.bgColor||'#000000');
-    const a=Math.max(0,Math.min(1, t.bg==='solid'?(t.bgOpacity==null?1:t.bgOpacity):(t.bgOpacity||0)));
-    bg=[tint[0]*a+bg[0]*(1-a), tint[1]*a+bg[1]*(1-a), tint[2]*a+bg[2]*(1-a)];
+    let a = t.bg==='solid' ? (t.bgOpacity==null?1:t.bgOpacity) : (t.bgOpacity==null?0.18:t.bgOpacity);
+    a=Math.max(0,Math.min(1,a));
+    return [tint[0]*a+raw[0]*(1-a), tint[1]*a+raw[1]*(1-a), tint[2]*a+raw[2]*(1-a)];
   }
-  return bg;
+  return raw;
 }
 function updateContrast(t){
   const box=document.getElementById('contrastBox'); if(!box||!t) return;
-  const ratio=contrastRatio(hexToRgb(t.color), textBgRgb(t));
+  const txt=hexToRgb(t.color);
+  const raw=rawBgRgb(t);                          // the photo/background behind
+  const eff=effBgRgb(t, raw);                     // that background seen through the backdrop
+  const ratio=contrastRatio(txt, eff);           // what the eye actually sees
+  const rawRatio=contrastRatio(txt, raw);
   const mk=(label,pass)=>'<span class="cr-b '+(pass?'pass':'fail')+'">'+label+' '+(pass?'✓':'✗')+'</span>';
-  const cap=(t.bg==='none')?'measured against the photo / background behind the text'
-           :(t.bg==='blur'?'measured against the blurred backdrop':'measured against the backdrop colour');
+  const opaque = t.bg==='solid' && (t.bgOpacity==null || t.bgOpacity>=0.99);
+  const hasBackdrop = (t.bg==='solid'||t.bg==='blur') && !opaque;   // translucent backdrop → background still shows through
   let verdict, vclass;
   if(ratio>=7){ verdict='Excellent — crisp everywhere'; vclass='ok'; }
   else if(ratio>=4.5){ verdict='Good — readable at any size'; vclass='ok'; }
   else if(ratio>=3){ verdict='OK for large text only'; vclass='warn'; }
   else { verdict='Too low — hard to read'; vclass='bad'; }
+  const cap = (t.bg==='none') ? 'Checked against the photo / background behind the text.'
+            : opaque ? 'Checked against the solid backdrop.'
+            : (t.bg==='blur' ? 'Checked against the background seen through the blur backdrop.'
+                             : 'Checked against the background seen through the tinted backdrop.');
+  const both = hasBackdrop ? ' Against the photo alone (if the backdrop were removed) it’s <b>'+rawRatio.toFixed(2)+':1</b>.' : '';
   box.innerHTML=
     '<div class="cr-head">Contrast checker</div>'+
     '<div class="cr-top"><span class="cr-ratio">'+ratio.toFixed(2)+':1</span><span class="cr-verdict '+vclass+'">'+verdict+'</span></div>'+
     '<div class="cr-badges">'+mk('AA large 3:1', ratio>=3)+mk('AA 4.5:1', ratio>=4.5)+mk('AAA 7:1', ratio>=7)+'</div>'+
-    '<div class="cr-note">How readable the text is on its background ('+cap+'). Higher is better — aim for <b>4.5:1</b> for normal text or <b>3:1</b> for large/bold headings (WCAG AA). AAA (7:1) is the strictest.</div>';
+    '<div class="cr-note">'+cap+both+' Higher is better — aim for <b>4.5:1</b> for normal text or <b>3:1</b> for large/bold headings (WCAG AA).</div>';
 }
 
 // ---- Style presets (saveable text looks) ----
@@ -1083,21 +1096,24 @@ function saveCustomStyles(){ try{ localStorage.setItem('textStyles', JSON.string
 function allStyles(){ return BUILTIN_STYLES.concat(customStyles.map(s=>Object.assign({custom:true}, s))); }
 function applyStyleTo(t, style){ STYLE_KEYS.forEach(k=>{ if(style[k]!==undefined) t[k]=style[k]; }); }
 function styleFromText(t){ const o={}; STYLE_KEYS.forEach(k=>{ if(t[k]!==undefined) o[k]=t[k]; }); return o; }
-function useStyle(style){
+function useStyle(style, name){
   if(sel && sel.type==='text'){ applyStyleTo(S().texts[sel.i], style); if(style.font) S().font=style.font; render(); syncPanel(); }
-  else { addTextObj(style); startEdit(S().texts.length-1); }     // nothing selected → new text in that style
+  else {                                                          // nothing selected → load into the editor to view/tweak
+    editStyle=Object.assign({}, DEFAULT_EDIT_STYLE, style); editingStyleName=name||'';
+    styleEditorFill(); buildStyleList();
+  }
 }
 function deleteCustomStyle(name){ if(!confirm('Delete the “'+name+'” style?')) return; customStyles=customStyles.filter(s=>s.name!==name); saveCustomStyles(); buildStyleList(); }
 function buildStyleList(){
   const el=document.getElementById('styleList'); if(!el) return;
   el.innerHTML='';
   allStyles().forEach(p=>{
-    const chip=document.createElement('button'); chip.className='style-chip';
+    const chip=document.createElement('button'); chip.className='style-chip'+(p.name===editingStyleName?' active':'');
     chip.innerHTML='<span class="sc-name"></span>'+(p.custom?'<span class="sc-del" title="Delete style">×</span>':'');
     const nm=chip.querySelector('.sc-name'); nm.textContent=p.name;
     if(p.style.font) nm.style.fontFamily='"'+p.style.font+'"';
     if(p.style.bold) nm.style.fontWeight='700';
-    chip.onclick=e=>{ if(e.target.closest('.sc-del')){ e.stopPropagation(); deleteCustomStyle(p.name); return; } useStyle(p.style); };
+    chip.onclick=e=>{ if(e.target.closest('.sc-del')){ e.stopPropagation(); deleteCustomStyle(p.name); return; } useStyle(p.style, p.name); };
     el.appendChild(chip);
   });
   refreshStyleEditorSelect();
@@ -1116,8 +1132,9 @@ function refreshStyleEditorSelect(){
   const w=document.getElementById('seWhich'); if(!w) return;
   w.innerHTML=''; const o0=document.createElement('option'); o0.value=''; o0.textContent='＋ New style'; w.appendChild(o0);
   customStyles.forEach(s=>{ const o=document.createElement('option'); o.value=s.name; o.textContent=s.name; w.appendChild(o); });
-  w.value=editingStyleName||'';
-  const del=document.getElementById('seDelBtn'); if(del) del.style.display=editingStyleName?'':'none';
+  const isCustom=customStyles.some(s=>s.name===editingStyleName);
+  w.value=isCustom?editingStyleName:'';
+  const del=document.getElementById('seDelBtn'); if(del) del.style.display=isCustom?'':'none';
 }
 function updateStylePreview(){
   const p=document.getElementById('sePreview'); if(!p) return; const sp=p.querySelector('span');
