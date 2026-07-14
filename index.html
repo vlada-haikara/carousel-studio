@@ -458,8 +458,38 @@ let cur=0;                       // current slide index
 let sel=null;                    // {type:'cell'|'text', i}
 let editing=null;                // index of text being edited inline
 let textMoreOpen=false;          // remember if the text "More settings" section is expanded
+let zCounter=0;                  // ever-increasing layer stamp — newest object sits on top
+function nextZ(){ return ++zCounter; }
 
 function S(){return slides[cur];}
+
+// Texts and overlays share one stacking order (their `z`). Build the combined
+// paint list, bottom→top, so any text can sit above/below any sticker/cutout.
+function zItems(s){
+  const items=[];
+  s.texts.forEach((t,i)=>items.push({kind:'text', z:t.z||0, i}));
+  (s.overlays||[]).forEach((o,i)=>items.push({kind:'overlay', z:o.z||0, i}));
+  items.sort((a,b)=>(a.z-b.z) || (a.kind===b.kind ? a.i-b.i : (a.kind==='text'?-1:1)));
+  return items;
+}
+function allZ(s){ return [...s.texts.map(t=>t.z||0), ...(s.overlays||[]).map(o=>o.z||0)]; }
+function selObj(){ if(!sel)return null; return sel.type==='text'?S().texts[sel.i] : sel.type==='overlay'?S().overlays[sel.i] : null; }
+function layerToFront(){ const o=selObj(); if(!o)return; o.z=Math.max(0,...allZ(S()))+1; render(); }
+function layerToBack(){ const o=selObj(); if(!o)return; o.z=Math.min(0,...allZ(S()))-1; render(); }
+function layerStep(dir){                       // dir +1 = forward (up), -1 = backward (down)
+  if(!sel||(sel.type!=='text'&&sel.type!=='overlay'))return;
+  const s=S(), items=zItems(s);                // ascending by z
+  const idx=items.findIndex(it=>it.kind===sel.type && it.i===sel.i);
+  const j=idx+dir; if(j<0||j>=items.length) return;
+  const a=selObj(), bIt=items[j], b=(bIt.kind==='text'?s.texts:s.overlays)[bIt.i];
+  const tz=a.z; a.z=b.z; b.z=tz; render();
+}
+// normalise legacy slides (no z): texts on the bottom, overlays on top — matches old look
+function normalizeSlideZ(s){
+  const missing=s.texts.some(t=>t.z==null) || (s.overlays||[]).some(o=>o.z==null);
+  if(missing){ s.texts.forEach(t=>t.z=nextZ()); (s.overlays||[]).forEach(o=>o.z=nextZ()); }
+  else allZ(s).forEach(z=>{ if(z>zCounter) zCounter=z; });
+}
 
 // ---- Build font dropdown ----
 const customFontNames=[];
@@ -636,18 +666,44 @@ function drawScene(cx, showSel){
     cx.lineWidth=5; cx.setLineDash([]); cx.strokeStyle='#8b5cf6'; cx.stroke(); cx.restore();
   }
 
-  // --- texts, each with optional backdrop ---
-  s.texts.forEach((t,i)=>{
+  // --- texts + overlay images, painted together in layer (z) order (bottom→top) ---
+  zItems(s).forEach(it=>{
+   if(it.kind==='overlay'){
+    const ov=s.overlays[it.i], i=it.i;
+    if(!ov.img) return;
+    const dw=ov.img.width*ov.scale, dh=ov.img.height*ov.scale;
+    cx.save();
+    cx.translate(ov.x*W, ov.y*H);
+    cx.rotate((ov.rot||0)*Math.PI/180);
+    if(ov.flip) cx.scale(-1,1);
+    cx.imageSmoothingQuality='high';
+    cx.drawImage(ov.img, -dw/2, -dh/2, dw, dh);
+    cx.restore();
+    if(showSel && sel&&sel.type==='overlay'&&sel.i===i){
+      cx.save();
+      cx.translate(ov.x*W, ov.y*H); cx.rotate((ov.rot||0)*Math.PI/180);
+      cx.strokeStyle='#8b5cf6'; cx.lineWidth=3; cx.setLineDash([10,6]);
+      cx.strokeRect(-dw/2, -dh/2, dw, dh);
+      cx.restore();
+    }
+    return;
+   }
+   { // --- text, with optional backdrop ---
+    const t=s.texts[it.i], i=it.i;
     if(editing===i) return;      // fully hidden while editing — the inline editor shows the styled pill
     if(t.curve && Math.abs(t.curve)>0.5){        // curved (arc) text
+      cx.save();
+      if(t.rot){ const cx0=t.x*W, cy0=t.y*H; cx.translate(cx0,cy0); cx.rotate(t.rot*Math.PI/180); cx.translate(-cx0,-cy0); }
       drawCurvedText(cx, t);
       if(showSel && sel&&sel.type==='text'&&sel.i===i){
         const b2=curveBox(t);
-        cx.save(); cx.strokeStyle='#8b5cf6'; cx.lineWidth=3; cx.setLineDash([10,6]);
-        cx.strokeRect(b2.x, b2.y, b2.w, b2.h); cx.restore();
+        cx.strokeStyle='#8b5cf6'; cx.lineWidth=3; cx.setLineDash([10,6]);
+        cx.strokeRect(b2.x, b2.y, b2.w, b2.h);
       }
+      cx.restore();
       return;
     }
+    cx.save();
     cx.font=(t.bold?'700 ':'')+t.size+'px "'+t.font+'"';
     const lines=t.text.split('\n'); let wmax=0;
     lines.forEach(ln=>{ const m=cx.measureText(ln||' '); const iw=(m.actualBoundingBoxLeft||0)+((m.actualBoundingBoxRight!=null)?m.actualBoundingBoxRight:m.width); wmax=Math.max(wmax, iw); });
@@ -671,6 +727,9 @@ function drawScene(cx, showSel){
     const iconW = t.icon ? t.size*0.75 : 0;
     const groupW = wmax + iconW;
     let gx=x; if(t.align==='center')gx=x-groupW/2; if(t.align==='right')gx=x-groupW;
+
+    // rotate the whole text group (backdrop + icon + glyphs + selection) around its centre
+    if(t.rot){ const cX=gx+groupW/2, cY=topY+lines.length*lineH/2; cx.translate(cX,cY); cx.rotate(t.rot*Math.PI/180); cx.translate(-cX,-cY); }
 
     // Pill hugs the real glyph ink with EQUAL padding all round (top of the tallest letter
     // to the bottom of the lowest), so a descender doesn't leave extra empty space on top.
@@ -704,26 +763,8 @@ function drawScene(cx, showSel){
       cx.strokeStyle='#8b5cf6'; cx.lineWidth=3; cx.setLineDash([10,6]);
       cx.strokeRect(gx-8, inkTop-6, groupW+16, inkH+12);
     }
-  });
-
-  // --- overlay cutout/PNG images (topmost layer) ---
-  (s.overlays||[]).forEach((ov,i)=>{
-    if(!ov.img) return;
-    const dw=ov.img.width*ov.scale, dh=ov.img.height*ov.scale;
-    cx.save();
-    cx.translate(ov.x*W, ov.y*H);
-    cx.rotate((ov.rot||0)*Math.PI/180);
-    if(ov.flip) cx.scale(-1,1);
-    cx.imageSmoothingQuality='high';
-    cx.drawImage(ov.img, -dw/2, -dh/2, dw, dh);
     cx.restore();
-    if(showSel && sel&&sel.type==='overlay'&&sel.i===i){
-      cx.save();
-      cx.translate(ov.x*W, ov.y*H); cx.rotate((ov.rot||0)*Math.PI/180);
-      cx.strokeStyle='#8b5cf6'; cx.lineWidth=3; cx.setLineDash([10,6]);
-      cx.strokeRect(-dw/2, -dh/2, dw, dh);
-      cx.restore();
-    }
+   }
   });
 }
 function drawCover(cx,img,x,y,w,h,scale=1,ox=0,oy=0){
@@ -785,6 +826,22 @@ function drawThumb(i){
 
 // ---- Selection panel (contextual) ----
 const selPanel=document.getElementById('selPanel');
+// Layer (stacking-order) controls — shared by the Text and Image panels
+const LAYER_UI=`
+        <div class="subhd">Layer</div>
+        <div class="fmts">
+          <button class="btn sm ghost" data-layer="back" title="Send to back">⤓ Back</button>
+          <button class="btn sm ghost" data-layer="backward" title="Send backward">▼</button>
+          <button class="btn sm ghost" data-layer="forward" title="Bring forward">▲</button>
+          <button class="btn sm ghost" data-layer="front" title="Bring to front">⤒ Front</button>
+        </div>`;
+function bindLayerButtons(){
+  selPanel.querySelectorAll('[data-layer]').forEach(b=>b.onclick=()=>{
+    const a=b.dataset.layer;
+    if(a==='front') layerToFront(); else if(a==='back') layerToBack();
+    else layerStep(a==='forward'?1:-1);
+  });
+}
 function syncPanel(){
   // sync brand/detail controls
   const s=S();
@@ -837,6 +894,7 @@ function syncPanel(){
           <button class="btn sm ghost chk${ov.flip?' on':''}" id="ovFlip" aria-pressed="${!!ov.flip}"><span class="cbox"></span>Flip</button>
           <button class="btn sm ghost" id="ovStraight">Straighten</button>
         </div>
+        ${LAYER_UI}
         <button class="btn sm ghost danger" id="ovDel" style="width:100%; margin-top:8px;">Delete image</button>
       </div>
       <p class="hint">Drag to move · pinch to resize and rotate.</p>`;
@@ -845,6 +903,7 @@ function syncPanel(){
     const ovFlip=document.getElementById('ovFlip');
     ovFlip.onclick=()=>{ ov.flip=!ov.flip; ovFlip.classList.toggle('on', ov.flip); ovFlip.setAttribute('aria-pressed', !!ov.flip); render(); };
     document.getElementById('ovStraight').onclick=()=>{ ov.rot=0; document.getElementById('ovRot').value=0; render(); updateOverlaySliders(); };
+    bindLayerButtons();
     document.getElementById('ovDel').onclick=()=>{ S().overlays.splice(sel.i,1); sel=null; render(); syncPanel(); buildSlidesBar(); };
   }else{
     const t=S().texts[sel.i];
@@ -863,6 +922,7 @@ function syncPanel(){
             <button data-v="center" title="Center"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 5h14M5.5 10h9M4 15h12"/></svg></button>
             <button data-v="right" title="Right"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 5h14M8 10h9M5 15h12"/></svg></button>
           </div></div>
+        <div class="row"><span class="lab">Rotate</span><input type="range" id="tRot" min="-180" max="180" value="${Math.round(((t.rot||0)%360+540)%360-180)}"><button class="btn sm ghost" id="tRotReset" title="Reset rotation">0°</button><span class="val"></span></div>
         <div class="subhd">Backdrop</div>
         <div class="row"><div class="seg" id="tBg">
             <button data-v="none">None</button>
@@ -879,6 +939,7 @@ function syncPanel(){
           <div class="row"><span class="lab">Bg corners</span><input type="range" id="tBgRadius" min="0" max="90" value="${t.bgRadius}"><span class="val"></span></div>
           ${t.bg!=='none'?'<button class="btn sm" id="tSwap" style="width:100%; margin-bottom:8px;">Swap text ⇄ backdrop colours</button>':''}
         </div>
+        ${LAYER_UI}
         <button class="btn sm ghost danger" id="tDel" style="width:100%; margin-top:10px;">Delete text</button>
       </div>`;
     const tf=document.getElementById('tFont');
@@ -924,6 +985,16 @@ function syncPanel(){
     document.getElementById('tBgOpacity').oninput=e=>{t.bgOpacity=+e.target.value; render();};
     document.getElementById('tBgPad').oninput=e=>{t.bgPad=+e.target.value; render();};
     document.getElementById('tBgRadius').oninput=e=>{t.bgRadius=+e.target.value; render();};
+    document.getElementById('tRot').oninput=e=>{
+      let v=+e.target.value; if(Math.abs(v)<4){ v=0; e.target.value=0; }   // snap to upright near centre
+      t.rot=v; render();
+      const o=e.target.parentElement.querySelector('.val'); if(o) o.textContent=formatVal(e.target);
+    };
+    document.getElementById('tRotReset').onclick=()=>{
+      t.rot=0; const r=document.getElementById('tRot'); r.value=0; render();
+      const o=r.parentElement.querySelector('.val'); if(o) o.textContent=formatVal(r); setSliderFill(r);
+    };
+    bindLayerButtons();
     const _sw=document.getElementById('tSwap'); if(_sw) _sw.onclick=()=>{ const c=t.color; t.color=t.bgColor; t.bgColor=c; render(); syncPanel(); };
     document.getElementById('tDel').onclick=()=>{S().texts.splice(sel.i,1); sel=null; render(); syncPanel();};
   }
@@ -933,6 +1004,12 @@ function syncPanel(){
 function toCanvas(e){
   const r=canvas.getBoundingClientRect();
   return { x:(e.clientX-r.left)/r.width*W, y:(e.clientY-r.top)/r.height*H };
+}
+// map a canvas point into a rotated object's local frame (inverse of a rotation by `deg` about cx,cy)
+function unrotatePt(p, cx, cy, deg){
+  if(!deg) return {x:p.x, y:p.y};
+  const a=-deg*Math.PI/180, dx=p.x-cx, dy=p.y-cy;
+  return { x:cx + dx*Math.cos(a)-dy*Math.sin(a), y:cy + dx*Math.sin(a)+dy*Math.cos(a) };
 }
 // Keep a photo always covering its cell — never let cell background show through.
 function clampCell(cell,r){
@@ -951,18 +1028,22 @@ function cellAt(p){
 }
 function hitTest(p){
   const s=S();
-  const ovs=s.overlays||[];
-  for(let i=ovs.length-1;i>=0;i--){ const ov=ovs[i]; if(!ov.img) continue;
-    const dx=p.x-ov.x*W, dy=p.y-ov.y*H, a=-(ov.rot||0)*Math.PI/180;
-    const lx=dx*Math.cos(a)-dy*Math.sin(a), ly=dx*Math.sin(a)+dy*Math.cos(a);
-    const dw=ov.img.width*ov.scale, dh=ov.img.height*ov.scale;
-    if(Math.abs(lx)<=dw/2 && Math.abs(ly)<=dh/2) return {type:'overlay',i};
-  }
-  for(let i=s.texts.length-1;i>=0;i--){
-    const t=s.texts[i];
+  const items=zItems(s);                       // top-most (highest z) is tested first
+  for(let k=items.length-1;k>=0;k--){
+    const it=items[k];
+    if(it.kind==='overlay'){
+      const ov=s.overlays[it.i]; if(!ov.img) continue;
+      const dx=p.x-ov.x*W, dy=p.y-ov.y*H, a=-(ov.rot||0)*Math.PI/180;
+      const lx=dx*Math.cos(a)-dy*Math.sin(a), ly=dx*Math.sin(a)+dy*Math.cos(a);
+      const dw=ov.img.width*ov.scale, dh=ov.img.height*ov.scale;
+      if(Math.abs(lx)<=dw/2 && Math.abs(ly)<=dh/2) return {type:'overlay',i:it.i};
+      continue;
+    }
+    const i=it.i, t=s.texts[i];
     if(t.curve && Math.abs(t.curve)>0.5){
+      const q=unrotatePt(p, t.x*W, t.y*H, t.rot);      // curved text spins around its apex
       const b=curveBox(t);
-      if(p.x>=b.x-12&&p.x<=b.x+b.w+12&&p.y>=b.y-12&&p.y<=b.y+b.h+12) return {type:'text',i};
+      if(q.x>=b.x-12&&q.x<=b.x+b.w+12&&q.y>=b.y-12&&q.y<=b.y+b.h+12) return {type:'text',i};
       continue;
     }
     ctx.font=(t.bold?'700 ':'')+t.size+'px "'+t.font+'"';
@@ -971,7 +1052,8 @@ function hitTest(p){
     const gw=wmax + (t.icon?t.size*0.75:0);
     let bx=t.x*W; if(t.align==='center')bx-=gw/2; if(t.align==='right')bx-=gw;
     const by=t.y*H, bh=lines.length*t.size*1.15;
-    if(p.x>=bx-12&&p.x<=bx+gw+12&&p.y>=by-12&&p.y<=by+bh+12) return {type:'text',i};
+    const q=unrotatePt(p, bx+gw/2, by+bh/2, t.rot);     // same pivot the draw uses
+    if(q.x>=bx-12&&q.x<=bx+gw+12&&q.y>=by-12&&q.y<=by+bh+12) return {type:'text',i};
   }
   const cells=LAYOUTS[s.layout].cells;
   for(let i=0;i<cells.length;i++){
@@ -1026,7 +1108,7 @@ function positionEditor(t){
   }
   editor.style.left=(rect.left + textCenter*sx)+'px';
   editor.style.top=(rect.top + inkCenter*sy)+'px';
-  editor.style.transform='translate(-50%,-50%)';        // centre the padded pill on the glyph box
+  editor.style.transform='translate(-50%,-50%)'+(t.rot?(' rotate('+t.rot+'deg)'):'');  // centre on the glyph box, matching any rotation
 }
 function startEdit(i){
   editing=i; const t=S().texts[i];
@@ -1071,6 +1153,10 @@ function updateSizeSlider(){
   const z=document.getElementById('tSize');
   if(z && sel && sel.type==='text'){ z.value=S().texts[sel.i].size; const o=z.parentElement.querySelector('.val'); if(o) o.textContent=formatVal(z); }
 }
+function updateTextRotSlider(){
+  const r=document.getElementById('tRot');
+  if(r && sel && sel.type==='text'){ r.value=Math.round(((S().texts[sel.i].rot||0)%360+540)%360-180); const o=r.parentElement.querySelector('.val'); if(o) o.textContent=formatVal(r); setSliderFill(r); }
+}
 canvas.addEventListener('pointerdown',e=>{
   if(recording) return;                                                 // ignore taps while exporting a video
   if(editing!==null) commitEdit();
@@ -1088,7 +1174,7 @@ canvas.addEventListener('pointerdown',e=>{
     const ang0=Math.atan2(pts[1].y-pts[0].y, pts[1].x-pts[0].x);
     if(sel.type==='cell'){ const c=S().cells[sel.i]; pinch={kind:'cell', dist, mx, my, scale:c.scale, ox:c.ox, oy:c.oy}; }
     else if(sel.type==='overlay'){ const ov=S().overlays[sel.i]; pinch={kind:'overlay', dist, mx, my, ang0, scale:ov.scale, rot:ov.rot||0, x:ov.x, y:ov.y}; }
-    else { const t=S().texts[sel.i]; pinch={kind:'text', dist, mx, my, size:t.size, tx:t.x, ty:t.y}; }
+    else { const t=S().texts[sel.i]; pinch={kind:'text', dist, mx, my, ang0, size:t.size, tx:t.x, ty:t.y, rot:t.rot||0}; }
     drag=null; return;
   }
   if(pointers.size>1) return;                        // ignore extra fingers otherwise
@@ -1126,8 +1212,10 @@ canvas.addEventListener('pointermove',e=>{
     }else if(pinch.kind==='text' && sel.type==='text'){
       const t=S().texts[sel.i];
       t.size=Math.max(16, Math.min(400, Math.round(pinch.size*f)));
+      const ang=Math.atan2(pts[1].y-pts[0].y, pts[1].x-pts[0].x);
+      t.rot=pinch.rot + (ang-pinch.ang0)*180/Math.PI;                 // twist to rotate
       t.x=pinch.tx+(mx-pinch.mx)/W; t.y=pinch.ty+(my-pinch.my)/H;
-      updateSizeSlider();
+      updateSizeSlider(); updateTextRotSlider();
     }else if(pinch.kind==='overlay' && sel.type==='overlay'){
       const ov=S().overlays[sel.i];
       ov.scale=Math.max(0.02, pinch.scale*f);
@@ -1246,9 +1334,9 @@ document.getElementById('bgImgClear').onclick=()=>{S().bgImg=null; render();};
 
 // ---- Add text ----
 function addTextObj(over){
-  const base={text:'Your text', placeholder:true, x:.5, y:.5, size:72, color:'#ffffff', font:S().font, align:'center', bold:false, curve:0,
+  const base={text:'Your text', placeholder:true, x:.5, y:.5, size:72, color:'#ffffff', font:S().font, align:'center', bold:false, curve:0, rot:0,
     bg:'none', bgColor:'#ffffff', bgOpacity:0.9, blur:5, bgPad:22, bgRadius:18};
-  S().texts.push(Object.assign(base, over||{}));
+  S().texts.push(Object.assign(base, over||{}, {z:nextZ()}));
   sel={type:'text', i:S().texts.length-1}; render(); syncPanel();
 }
 document.getElementById('addText').onclick=()=>{ addTextObj(); startEdit(S().texts.length-1); };
@@ -1272,7 +1360,7 @@ function addOverlayFromSrc(src){
   img.onload=()=>{
     const scale=Math.min((W*0.5)/img.width, (H*0.5)/img.height);   // start ~half the canvas
     const s=S(); s.overlays=s.overlays||[];
-    s.overlays.push({img, src, x:0.5, y:0.5, scale, rot:0, flip:false});
+    s.overlays.push({img, src, x:0.5, y:0.5, scale, rot:0, flip:false, z:nextZ()});
     sel={type:'overlay', i:s.overlays.length-1};
     render(); syncPanel(); buildSlidesBar();
   };
@@ -1452,7 +1540,7 @@ function serialize(){
     texts:s.texts.map(t=>Object.assign({},t)),
     bg:s.bg, bgSrc:s.bgSrc||null, brand:s.brand, font:s.font,
     gap:s.gap, radius:s.radius, pad:s.pad, frame:s.frame,
-    overlays:(s.overlays||[]).map(o=>({src:o.src||null, x:o.x, y:o.y, scale:o.scale, rot:o.rot||0, flip:!!o.flip}))
+    overlays:(s.overlays||[]).map(o=>({src:o.src||null, x:o.x, y:o.y, scale:o.scale, rot:o.rot||0, flip:!!o.flip, z:o.z||0}))
   }))};
 }
 function saveProject(){
@@ -1470,8 +1558,9 @@ function loadProject(obj){
     bg:s.bg||'#ffffff', bgImg:null, bgSrc:s.bgSrc||null,
     brand:s.brand||'#8b5cf6', font:s.font||'Avenir Next',
     gap:s.gap||0, radius:s.radius||0, pad:s.pad||0, frame:s.frame||0,
-    overlays:(s.overlays||[]).map(o=>({img:null, src:o.src||null, x:o.x==null?0.5:o.x, y:o.y==null?0.5:o.y, scale:o.scale||0.3, rot:o.rot||0, flip:!!o.flip}))
+    overlays:(s.overlays||[]).map(o=>({img:null, src:o.src||null, x:o.x==null?0.5:o.x, y:o.y==null?0.5:o.y, scale:o.scale||0.3, rot:o.rot||0, flip:!!o.flip, z:o.z==null?null:o.z}))
   }));
+  slides.forEach(normalizeSlideZ);                       // give legacy slides (no z) a sane stacking order
   cur=Math.min(obj.cur||0, slides.length-1); sel=null; editing=null;
   slides.forEach(s=>{
     s.cells.forEach(c=>{ if(c.src){ const im=new Image(); im.onload=()=>{c.img=im; render(); buildSlidesBar();}; im.src=c.src; }});
