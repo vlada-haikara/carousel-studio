@@ -214,6 +214,12 @@
   .layer-row{display:flex; align-items:center; gap:10px; padding:9px 10px; border-radius:12px;
     background:var(--glass-fill-weak); border:1px solid var(--glass-border); cursor:pointer; min-height:44px;}
   .layer-row.active{border-color:var(--accent-border); background:var(--accent-fill); box-shadow:var(--glow-accent);}
+  .layer-row .lr-drag{flex:0 0 auto; width:28px; height:36px; display:grid; place-items:center;
+    color:var(--txt-faint); cursor:grab; touch-action:none; margin:-6px 0;}
+  .layer-row .lr-drag:active{cursor:grabbing;}
+  .layer-row .lr-drag svg{width:18px; height:18px;}
+  .layer-row.dragging{opacity:.9; border-color:var(--accent-border); background:var(--accent-fill);
+    box-shadow:var(--shadow-glass-lg); }
   .layer-row .lr-ic{width:20px; height:20px; flex:0 0 auto; color:var(--muted);}
   .layer-row.active .lr-ic{color:var(--on-accent-fill);}
   .layer-row .lr-label{flex:1; min-width:0; font-size:14px; font-weight:600; color:var(--txt);
@@ -700,6 +706,8 @@ function drawScene(cx, showSel){
     cx.rotate((ov.rot||0)*Math.PI/180);
     if(ov.flip) cx.scale(-1,1);
     cx.imageSmoothingQuality='high';
+    const orr=(ov.radius||0)/100*Math.min(dw,dh);        // rounded corners (% of the shorter side)
+    if(orr>0){ roundRect(cx,-dw/2,-dh/2,dw,dh,orr); cx.clip(); }
     cx.drawImage(ov.img, -dw/2, -dh/2, dw, dh);
     cx.restore();
     if(showSel && sel&&sel.type==='overlay'&&sel.i===i){
@@ -858,26 +866,63 @@ function layerLabel(kind, o){
   return 'Image / sticker';
 }
 function isOffCanvas(o){ return o.x<0.02 || o.x>0.98 || o.y<0.02 || o.y>0.98; }
+const GRIP_ICON='<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>';
 function buildLayersList(){
   const el=document.getElementById('layersList'); if(!el) return;
   const s=S(), items=zItems(s);                          // ascending by z
   el.innerHTML='';
-  if(!items.length){ el.innerHTML='<div class="layers-empty">Nothing here yet. Add text, a sticker, or an image and every piece shows up in this list — tap one to jump to it.</div>'; return; }
+  if(!items.length){ el.innerHTML='<div class="layers-empty">Nothing here yet. Add text, a sticker, or an image and every piece shows up in this list — drag to restack, tap to jump to it.</div>'; return; }
   items.slice().reverse().forEach(it=>{                  // show top layer first
     const o=(it.kind==='text'?s.texts:s.overlays)[it.i];
     const row=document.createElement('div');
     row.className='layer-row'+(sel&&sel.type===it.kind&&sel.i===it.i?' active':'');
-    row.innerHTML=LR_ICON[it.kind]+'<span class="lr-label"></span>'+
+    row.dataset.kind=it.kind; row.dataset.idx=it.i;      // stable array index (reordering only changes z)
+    row.innerHTML='<span class="lr-drag" title="Drag to restack" aria-label="Drag to restack">'+GRIP_ICON+'</span>'+
+      LR_ICON[it.kind]+'<span class="lr-label"></span>'+
       (isOffCanvas(o)?'<span class="lr-off">off-screen</span>':'')+
       '<button class="lr-center" title="Bring back to centre" aria-label="Bring back to centre">'+CENTER_ICON+'</button>';
     row.querySelector('.lr-label').textContent=layerLabel(it.kind,o);
-    row.onclick=e=>{ if(e.target.closest('.lr-center')) return;
+    row.onclick=e=>{ if(e.target.closest('.lr-center')||e.target.closest('.lr-drag')) return;
       sel={type:it.kind, i:it.i}; render(); syncPanel(); };
     row.querySelector('.lr-center').onclick=e=>{ e.stopPropagation();
       o.x=0.5; o.y=0.5; sel={type:it.kind, i:it.i}; render(); syncPanel(); };
+    row.querySelector('.lr-drag').addEventListener('pointerdown', e=>startLayerDrag(e, row));
     el.appendChild(row);
   });
 }
+// ---- Drag-to-reorder in the Layers list (grip handle) ----
+let layerDrag=null;
+function startLayerDrag(e, row){
+  e.preventDefault(); e.stopPropagation();
+  layerDrag={row, id:e.pointerId};
+  row.classList.add('dragging');
+  try{ e.currentTarget.setPointerCapture(e.pointerId); }catch(_){}
+}
+function layerRowAfter(container, y){                    // the row the dragged item should sit BEFORE
+  const rows=[...container.querySelectorAll('.layer-row:not(.dragging)')];
+  let best={off:-Infinity, el:null};
+  for(const r of rows){ const b=r.getBoundingClientRect(); const off=y-(b.top+b.height/2);
+    if(off<0 && off>best.off) best={off, el:r}; }
+  return best.el;
+}
+function applyLayerOrderFromDOM(){                       // top row = highest z
+  const list=document.getElementById('layersList'); if(!list) return;
+  const s=S(), rows=[...list.querySelectorAll('.layer-row')], n=rows.length;
+  rows.forEach((row,idx)=>{ const o=(row.dataset.kind==='text'?s.texts:s.overlays)[+row.dataset.idx]; if(o) o.z=n-idx; });
+  if(n>zCounter) zCounter=n;
+  render();
+}
+document.addEventListener('pointermove', e=>{
+  if(!layerDrag) return;
+  const list=document.getElementById('layersList'); if(!list) return;
+  const after=layerRowAfter(list, e.clientY);
+  if(after==null){ if(layerDrag.row!==list.lastElementChild) list.appendChild(layerDrag.row); }
+  else if(after!==layerDrag.row && after!==layerDrag.row.nextSibling){ list.insertBefore(layerDrag.row, after); }
+  applyLayerOrderFromDOM();
+});
+function endLayerDrag(){ if(!layerDrag) return; layerDrag.row.classList.remove('dragging'); layerDrag=null; buildLayersList(); }
+document.addEventListener('pointerup', endLayerDrag);
+document.addEventListener('pointercancel', endLayerDrag);
 
 // ---- Selection panel (contextual) ----
 const selPanel=document.getElementById('selPanel');
@@ -946,6 +991,7 @@ function syncPanel(){
         <div class="selhd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="13" height="13" rx="2"/><path d="M10 10h11v11H10z"/></svg>Image</div>
         <div class="row"><span class="lab">Size</span><input type="range" id="ovSize" min="5" max="150" value="${sizePct}"><span class="val"></span></div>
         <div class="row"><span class="lab">Rotate</span><input type="range" id="ovRot" min="-180" max="180" value="${Math.round(ov.rot||0)}"><span class="val"></span></div>
+        <div class="row"><span class="lab">Corners</span><input type="range" id="ovRadius" min="0" max="50" value="${Math.round(ov.radius||0)}"><span class="val"></span></div>
         <div class="twocol">
           <button class="btn sm ghost chk${ov.flip?' on':''}" id="ovFlip" aria-pressed="${!!ov.flip}"><span class="cbox"></span>Flip</button>
           <button class="btn sm ghost" id="ovStraight">Straighten</button>
@@ -956,6 +1002,7 @@ function syncPanel(){
       <p class="hint">Drag to move · pinch to resize and rotate.</p>`;
     document.getElementById('ovSize').oninput=e=>{ if(ov.img){ ov.scale=(+e.target.value/100)*W/ov.img.width; render(); } };
     document.getElementById('ovRot').oninput=e=>{ ov.rot=+e.target.value; render(); };
+    document.getElementById('ovRadius').oninput=e=>{ ov.radius=+e.target.value; render(); };
     const ovFlip=document.getElementById('ovFlip');
     ovFlip.onclick=()=>{ ov.flip=!ov.flip; ovFlip.classList.toggle('on', ov.flip); ovFlip.setAttribute('aria-pressed', !!ov.flip); render(); };
     document.getElementById('ovStraight').onclick=()=>{ ov.rot=0; document.getElementById('ovRot').value=0; render(); updateOverlaySliders(); };
@@ -1416,7 +1463,7 @@ function addOverlayFromSrc(src){
   img.onload=()=>{
     const scale=Math.min((W*0.5)/img.width, (H*0.5)/img.height);   // start ~half the canvas
     const s=S(); s.overlays=s.overlays||[];
-    s.overlays.push({img, src, x:0.5, y:0.5, scale, rot:0, flip:false, z:nextZ()});
+    s.overlays.push({img, src, x:0.5, y:0.5, scale, rot:0, flip:false, radius:0, z:nextZ()});
     sel={type:'overlay', i:s.overlays.length-1};
     render(); syncPanel(); buildSlidesBar();
   };
@@ -1596,7 +1643,7 @@ function serialize(){
     texts:s.texts.map(t=>Object.assign({},t)),
     bg:s.bg, bgSrc:s.bgSrc||null, brand:s.brand, font:s.font,
     gap:s.gap, radius:s.radius, pad:s.pad, frame:s.frame,
-    overlays:(s.overlays||[]).map(o=>({src:o.src||null, x:o.x, y:o.y, scale:o.scale, rot:o.rot||0, flip:!!o.flip, z:o.z||0}))
+    overlays:(s.overlays||[]).map(o=>({src:o.src||null, x:o.x, y:o.y, scale:o.scale, rot:o.rot||0, flip:!!o.flip, radius:o.radius||0, z:o.z||0}))
   }))};
 }
 function saveProject(){
@@ -1614,7 +1661,7 @@ function loadProject(obj){
     bg:s.bg||'#ffffff', bgImg:null, bgSrc:s.bgSrc||null,
     brand:s.brand||'#8b5cf6', font:s.font||'Avenir Next',
     gap:s.gap||0, radius:s.radius||0, pad:s.pad||0, frame:s.frame||0,
-    overlays:(s.overlays||[]).map(o=>({img:null, src:o.src||null, x:o.x==null?0.5:o.x, y:o.y==null?0.5:o.y, scale:o.scale||0.3, rot:o.rot||0, flip:!!o.flip, z:o.z==null?null:o.z}))
+    overlays:(s.overlays||[]).map(o=>({img:null, src:o.src||null, x:o.x==null?0.5:o.x, y:o.y==null?0.5:o.y, scale:o.scale||0.3, rot:o.rot||0, flip:!!o.flip, radius:o.radius||0, z:o.z==null?null:o.z}))
   }));
   slides.forEach(normalizeSlideZ);                       // give legacy slides (no z) a sane stacking order
   cur=Math.min(obj.cur||0, slides.length-1); sel=null; editing=null;
